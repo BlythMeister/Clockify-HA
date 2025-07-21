@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 
 import aiohttp
 import async_timeout
@@ -70,29 +70,32 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 # Get current timer
                 current_timer = await self._async_get_current_timer(user_id)
                 
+                # Get time summaries
+                now = datetime.now(timezone.utc)
+                daily_duration = await self._async_get_daily_time(user_id, now)
+                weekly_duration, week_start, week_end = await self._async_get_weekly_time(user_id, now)
+                
                 # If there's an active timer, get project and task details
+                project_data = None
+                task_data = None
+                
                 if current_timer:
-                    project_data = None
-                    task_data = None
-                    
                     if current_timer.get("projectId"):
                         project_data = await self._async_get_project(current_timer["projectId"])
                     
                     if current_timer.get("taskId"):
                         task_data = await self._async_get_task(current_timer["projectId"], current_timer["taskId"])
-                    
-                    return {
-                        "current_timer": current_timer,
-                        "project": project_data,
-                        "task": task_data,
-                        "user": user_data
-                    }
                 
                 return {
-                    "current_timer": None,
-                    "project": None,
-                    "task": None,
-                    "user": user_data
+                    "current_timer": current_timer,
+                    "project": project_data,
+                    "task": task_data,
+                    "user": user_data,
+                    "daily_duration": daily_duration,
+                    "weekly_duration": weekly_duration,
+                    "current_date": now.strftime("%Y-%m-%d"),
+                    "week_start": week_start,
+                    "week_end": week_end,
                 }
                 
         except Exception as err:
@@ -142,3 +145,73 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning(f"Error getting task {task_id}: {response.status}")
                 return None
             return await response.json()
+    
+    async def _async_get_daily_time(self, user_id: str, date: datetime) -> int:
+        """Get total time for today."""
+        start_date = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/user/{user_id}/time-entries"
+        headers = {"X-Api-Key": self.api_key}
+        params = {
+            "start": start_date.isoformat().replace("+00:00", "Z"),
+            "end": end_date.isoformat().replace("+00:00", "Z"),
+        }
+        
+        try:
+            async with self.session.get(url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    _LOGGER.warning(f"Error getting daily time: {response.status}")
+                    return 0
+                
+                entries = await response.json()
+                total_seconds = 0
+                
+                for entry in entries:
+                    time_interval = entry.get("timeInterval", {})
+                    if time_interval.get("start") and time_interval.get("end"):
+                        start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
+                        end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
+                        total_seconds += int((end - start).total_seconds())
+                
+                return total_seconds
+                
+        except Exception as err:
+            _LOGGER.warning(f"Error calculating daily time: {err}")
+            return 0
+    
+    async def _async_get_weekly_time(self, user_id: str, date: datetime) -> tuple[int, str, str]:
+        """Get total time for this week."""
+        # Calculate start of week (Monday)
+        days_since_monday = date.weekday()
+        week_start = date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_monday)
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59, microseconds=999999)
+        
+        url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/user/{user_id}/time-entries"
+        headers = {"X-Api-Key": self.api_key}
+        params = {
+            "start": week_start.isoformat().replace("+00:00", "Z"),
+            "end": week_end.isoformat().replace("+00:00", "Z"),
+        }
+        
+        try:
+            async with self.session.get(url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    _LOGGER.warning(f"Error getting weekly time: {response.status}")
+                    return 0, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
+                
+                entries = await response.json()
+                total_seconds = 0
+                
+                for entry in entries:
+                    time_interval = entry.get("timeInterval", {})
+                    if time_interval.get("start") and time_interval.get("end"):
+                        start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
+                        end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
+                        total_seconds += int((end - start).total_seconds())
+                
+                return total_seconds, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
+                
+        except Exception as err:
+            _LOGGER.warning(f"Error calculating weekly time: {err}")
+            return 0, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")

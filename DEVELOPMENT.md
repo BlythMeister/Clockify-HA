@@ -6,6 +6,7 @@ This integration uses the following Clockify API endpoints:
 
 - `GET /api/v1/user` - Get current user information
 - `GET /api/v1/workspaces/{workspaceId}/user/{userId}/time-entries?in-progress=true` - Get current timer
+- `GET /api/v1/workspaces/{workspaceId}/user/{userId}/time-entries?start={start}&end={end}` - Get time entries for date range
 - `GET /api/v1/workspaces/{workspaceId}/projects/{projectId}` - Get project details
 - `GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/tasks/{taskId}` - Get task details
 

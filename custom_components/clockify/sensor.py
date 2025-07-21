@@ -20,7 +20,11 @@ async def async_setup_entry(
     """Set up Clockify sensor based on a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
-    async_add_entities([ClockifyCurrentTimerSensor(coordinator, entry)])
+    async_add_entities([
+        ClockifyCurrentTimerSensor(coordinator, entry),
+        ClockifyWeeklyTimeSensor(coordinator, entry),
+        ClockifyDailyTimeSensor(coordinator, entry),
+    ])
 
 class ClockifyCurrentTimerSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Clockify current timer sensor."""
@@ -110,6 +114,95 @@ class ClockifyCurrentTimerSensor(CoordinatorEntity, SensorEntity):
             "duration_seconds": duration_seconds if start_time else None,
             "billable": current_timer.get("billable", False),
             "tags": [tag.get("name") for tag in current_timer.get("tags", [])],
+        }
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
+
+class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Clockify weekly time sensor."""
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_weekly_time"
+        self._attr_name = "Clockify Weekly Time"
+        self._attr_icon = "mdi:calendar-week"
+        self._attr_native_unit_of_measurement = "h"
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._entry = entry
+
+    @property
+    def state(self) -> float | None:
+        """Return the state of the sensor."""
+        if not self.coordinator.data:
+            return None
+            
+        weekly_duration = self.coordinator.data.get("weekly_duration", 0)
+        # Convert seconds to hours
+        return round(weekly_duration / 3600, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        if not self.coordinator.data:
+            return None
+            
+        weekly_duration = self.coordinator.data.get("weekly_duration", 0)
+        hours = weekly_duration // 3600
+        minutes = (weekly_duration % 3600) // 60
+        
+        return {
+            "duration_seconds": weekly_duration,
+            "duration_formatted": f"{hours:02d}:{minutes:02d}",
+            "week_start": self.coordinator.data.get("week_start"),
+            "week_end": self.coordinator.data.get("week_end"),
+        }
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
+
+class ClockifyDailyTimeSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Clockify daily time sensor."""
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_daily_time"
+        self._attr_name = "Clockify Daily Time"
+        self._attr_icon = "mdi:calendar-today"
+        self._attr_native_unit_of_measurement = "h"
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._entry = entry
+
+    @property
+    def state(self) -> float | None:
+        """Return the state of the sensor."""
+        if not self.coordinator.data:
+            return None
+            
+        daily_duration = self.coordinator.data.get("daily_duration", 0)
+        # Convert seconds to hours
+        return round(daily_duration / 3600, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        if not self.coordinator.data:
+            return None
+            
+        daily_duration = self.coordinator.data.get("daily_duration", 0)
+        hours = daily_duration // 3600
+        minutes = (daily_duration % 3600) // 60
+        
+        return {
+            "duration_seconds": daily_duration,
+            "duration_formatted": f"{hours:02d}:{minutes:02d}",
+            "date": self.coordinator.data.get("current_date"),
         }
 
     @property

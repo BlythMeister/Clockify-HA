@@ -5,6 +5,8 @@ A custom Home Assistant integration to monitor your Clockify time tracking activ
 ## Features
 
 - **Current Timer Sensor**: Shows your currently active timer with project and task names
+- **Weekly Time Sensor**: Displays total time tracked for the current week (Monday to Sunday)
+- **Daily Time Sensor**: Shows total time tracked for today
 - **Real-time Updates**: Automatically updates every 30 seconds
 - **Rich Attributes**: Provides detailed information about your active timer including:
   - Project name and color
@@ -81,6 +83,31 @@ Shows the current active timer with project and task names.
 - `duration_seconds`: Duration in seconds
 - `billable`: Whether the timer is billable
 - `tags`: List of tag names
+
+### `sensor.clockify_weekly_time`
+
+Shows the total time tracked for the current week (Monday to Sunday).
+
+**State:** Total hours for the week (decimal format, e.g., 40.5)
+
+**Attributes:**
+
+- `duration_seconds`: Total duration in seconds
+- `duration_formatted`: Human-readable duration (HH:MM)
+- `week_start`: Start date of the week (YYYY-MM-DD)
+- `week_end`: End date of the week (YYYY-MM-DD)
+
+### `sensor.clockify_daily_time`
+
+Shows the total time tracked for today.
+
+**State:** Total hours for today (decimal format, e.g., 8.25)
+
+**Attributes:**
+
+- `duration_seconds`: Total duration in seconds
+- `duration_formatted`: Human-readable duration (HH:MM)
+- `date`: Current date (YYYY-MM-DD)
 
 ## Example Automations
 
