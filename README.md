@@ -145,6 +145,133 @@ automation:
           brightness: 200
 ```
 
+## Example Lovelace Dashboard
+
+### Current Timer Status Card
+
+Here's a beautiful dashboard card to display your current Clockify timer:
+
+```yaml
+type: custom:mushroom-template-card
+primary: |
+  {% if state_attr('sensor.clockify_current_timer', 'status') == 'active' %}
+    🔴 {{ states('sensor.clockify_current_timer') }}
+  {% else %}
+    ⏸️ No Active Timer
+  {% endif %}
+secondary: |
+  {% if state_attr('sensor.clockify_current_timer', 'status') == 'active' %}
+    {{ state_attr('sensor.clockify_current_timer', 'description') or 'No description' }}
+    {% if state_attr('sensor.clockify_current_timer', 'duration') %}
+      • {{ state_attr('sensor.clockify_current_timer', 'duration') }}
+    {% endif %}
+  {% else %}
+    Start a timer in Clockify to begin tracking
+  {% endif %}
+icon: |
+  {% if state_attr('sensor.clockify_current_timer', 'status') == 'active' %}
+    mdi:timer
+  {% else %}
+    mdi:timer-off
+  {% endif %}
+icon_color: |
+  {% if state_attr('sensor.clockify_current_timer', 'status') == 'active' %}
+    red
+  {% else %}
+    grey
+  {% endif %}
+badge_icon: |
+  {% if state_attr('sensor.clockify_current_timer', 'billable') %}
+    mdi:currency-usd
+  {% endif %}
+badge_color: green
+tap_action:
+  action: more-info
+```
+
+### Current Timer Status (Markdown - No Dependencies)
+
+A simple markdown card that works with standard Home Assistant:
+
+```yaml
+type: markdown
+title: 🔴 Clockify Timer
+content: |
+  {% if state_attr('sensor.clockify_current_timer', 'status') == 'active' %}
+  ## ⏰ Currently Working On:
+  **{{ states('sensor.clockify_current_timer') }}**
+  
+  {% if state_attr('sensor.clockify_current_timer', 'description') %}
+  📝 *{{ state_attr('sensor.clockify_current_timer', 'description') }}*
+  {% endif %}
+  
+  ⏱️ **Duration:** {{ state_attr('sensor.clockify_current_timer', 'duration') or 'Starting...' }}
+  
+  {% if state_attr('sensor.clockify_current_timer', 'billable') %}
+  💰 **Billable** | 
+  {% endif %}
+  🏷️ {{ state_attr('sensor.clockify_current_timer', 'tags') | join(', ') if state_attr('sensor.clockify_current_timer', 'tags') else 'No tags' }}
+  
+  ---
+  ⏰ **Started:** {{ as_timestamp(state_attr('sensor.clockify_current_timer', 'start_time')) | timestamp_custom('%H:%M', true) if state_attr('sensor.clockify_current_timer', 'start_time') else 'Unknown' }}
+  {% else %}
+  ## ⏸️ No Active Timer
+  
+  Start a timer in Clockify to begin tracking your work.
+  
+  📊 **Today:** {{ states('sensor.clockify_daily_time') }}h | **Week:** {{ states('sensor.clockify_weekly_time') }}h
+  {% endif %}
+```
+
+### Time Tracking Summary Card
+
+A comprehensive overview card showing all your time tracking data:
+
+```yaml
+type: entities
+title: 📊 Clockify Time Tracking
+entities:
+  - entity: sensor.clockify_current_timer
+    name: Current Timer
+    icon: mdi:timer
+  - entity: sensor.clockify_daily_time
+    name: Today's Total
+    icon: mdi:calendar-today
+  - entity: sensor.clockify_weekly_time
+    name: This Week's Total
+    icon: mdi:calendar-week
+state_color: true
+```
+
+### Minimal Timer Display
+
+For a clean, minimal display:
+
+```yaml
+type: glance
+title: Clockify Status
+entities:
+  - entity: sensor.clockify_current_timer
+    name: Current
+  - entity: sensor.clockify_daily_time
+    name: Today
+  - entity: sensor.clockify_weekly_time
+    name: Week
+columns: 3
+```
+
+**Note:** The mushroom card example requires the [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) custom component from HACS.
+
+#### Installing Mushroom Cards
+
+1. Open HACS in your Home Assistant instance
+2. Go to "Frontend" section
+3. Click "Explore & Download Repositories"
+4. Search for "Mushroom"
+5. Install "Mushroom Cards" by @piitaya
+6. Restart Home Assistant
+7. Clear your browser cache or hard refresh (Ctrl+F5)
+
 ## Support
 
 If you encounter any issues or have feature requests, please [create an issue](https://github.com/BlythMeister/Clockify-HA/issues) on GitHub.
