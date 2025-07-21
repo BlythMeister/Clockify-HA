@@ -9,6 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.device_registry import DeviceEntryType
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 
@@ -35,7 +37,13 @@ class ClockifyCurrentTimerSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_current_timer"
         self._attr_name = "Clockify Current Timer"
         self._attr_icon = "mdi:timer"
-        self._attr_entity_id = f"sensor.clockify_current_timer"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Clockify",
+            manufacturer="Clockify",
+            model="Time Tracker",
+            entry_type=DeviceEntryType.SERVICE,
+        )
         self._entry = entry
 
     @property
@@ -133,7 +141,13 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
         self._attr_icon = "mdi:calendar-week"
         self._attr_native_unit_of_measurement = "h"
         self._attr_device_class = SensorDeviceClass.DURATION
-        self._attr_entity_id = f"sensor.clockify_weekly_time"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Clockify",
+            manufacturer="Clockify",
+            model="Time Tracker",
+            entry_type=DeviceEntryType.SERVICE,
+        )
         self._entry = entry
 
     @property
@@ -184,7 +198,13 @@ class ClockifyDailyTimeSensor(CoordinatorEntity, SensorEntity):
         self._attr_icon = "mdi:calendar-today"
         self._attr_native_unit_of_measurement = "h"
         self._attr_device_class = SensorDeviceClass.DURATION
-        self._attr_entity_id = f"sensor.clockify_daily_time"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Clockify",
+            manufacturer="Clockify",
+            model="Time Tracker",
+            entry_type=DeviceEntryType.SERVICE,
+        )
         self._entry = entry
 
     @property
