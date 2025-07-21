@@ -70,10 +70,21 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 # Get current timer
                 current_timer = await self._async_get_current_timer(user_id)
                 
-                # Get time summaries
+                # Get time summaries with error handling
                 now = datetime.now(timezone.utc)
-                daily_duration = await self._async_get_daily_time(user_id, now)
-                weekly_duration, week_start, week_end = await self._async_get_weekly_time(user_id, now)
+                try:
+                    daily_duration = await self._async_get_daily_time(user_id, now)
+                except Exception as err:
+                    _LOGGER.warning(f"Error getting daily time: {err}")
+                    daily_duration = 0
+                
+                try:
+                    weekly_duration, week_start, week_end = await self._async_get_weekly_time(user_id, now)
+                except Exception as err:
+                    _LOGGER.warning(f"Error getting weekly time: {err}")
+                    weekly_duration = 0
+                    week_start = now.strftime("%Y-%m-%d")
+                    week_end = now.strftime("%Y-%m-%d")
                 
                 # If there's an active timer, get project and task details
                 project_data = None

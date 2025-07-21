@@ -35,6 +35,7 @@ class ClockifyCurrentTimerSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_current_timer"
         self._attr_name = "Clockify Current Timer"
         self._attr_icon = "mdi:timer"
+        self._attr_entity_id = f"sensor.clockify_current_timer"
         self._entry = entry
 
     @property
@@ -132,13 +133,14 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
         self._attr_icon = "mdi:calendar-week"
         self._attr_native_unit_of_measurement = "h"
         self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_entity_id = f"sensor.clockify_weekly_time"
         self._entry = entry
 
     @property
     def state(self) -> float | None:
         """Return the state of the sensor."""
         if not self.coordinator.data:
-            return None
+            return 0
             
         weekly_duration = self.coordinator.data.get("weekly_duration", 0)
         # Convert seconds to hours
@@ -148,7 +150,12 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the state attributes."""
         if not self.coordinator.data:
-            return None
+            return {
+                "duration_seconds": 0,
+                "duration_formatted": "00:00",
+                "week_start": None,
+                "week_end": None,
+            }
             
         weekly_duration = self.coordinator.data.get("weekly_duration", 0)
         hours = weekly_duration // 3600
@@ -177,13 +184,14 @@ class ClockifyDailyTimeSensor(CoordinatorEntity, SensorEntity):
         self._attr_icon = "mdi:calendar-today"
         self._attr_native_unit_of_measurement = "h"
         self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_entity_id = f"sensor.clockify_daily_time"
         self._entry = entry
 
     @property
     def state(self) -> float | None:
         """Return the state of the sensor."""
         if not self.coordinator.data:
-            return None
+            return 0
             
         daily_duration = self.coordinator.data.get("daily_duration", 0)
         # Convert seconds to hours
@@ -193,7 +201,11 @@ class ClockifyDailyTimeSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the state attributes."""
         if not self.coordinator.data:
-            return None
+            return {
+                "duration_seconds": 0,
+                "duration_formatted": "00:00",
+                "date": None,
+            }
             
         daily_duration = self.coordinator.data.get("daily_duration", 0)
         hours = daily_duration // 3600
