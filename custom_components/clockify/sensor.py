@@ -26,6 +26,8 @@ async def async_setup_entry(
         ClockifyCurrentTimerSensor(coordinator, entry),
         ClockifyWeeklyTimeSensor(coordinator, entry),
         ClockifyDailyTimeSensor(coordinator, entry),
+        ClockifyWeeklyTotalSensor(coordinator, entry),
+        ClockifyDailyTotalSensor(coordinator, entry),
     ])
 
 class ClockifyCurrentTimerSensor(CoordinatorEntity, SensorEntity):
@@ -235,6 +237,126 @@ class ClockifyDailyTimeSensor(CoordinatorEntity, SensorEntity):
             "duration_seconds": daily_duration,
             "duration_formatted": f"{hours:02d}:{minutes:02d}",
             "date": self.coordinator.data.get("current_date"),
+        }
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
+
+class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Clockify weekly total time sensor (including current timer)."""
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_weekly_total"
+        self._attr_name = "Clockify Weekly Total"
+        self._attr_icon = "mdi:calendar-week-begin"
+        self._attr_native_unit_of_measurement = "h"
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Clockify",
+            manufacturer="Clockify",
+            model="Time Tracker",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+        self._entry = entry
+
+    @property
+    def state(self) -> float | None:
+        """Return the state of the sensor."""
+        if not self.coordinator.data:
+            return 0
+            
+        weekly_total = self.coordinator.data.get("weekly_total", 0)
+        # Convert seconds to hours
+        return round(weekly_total / 3600, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        if not self.coordinator.data:
+            return {
+                "duration_seconds": 0,
+                "duration_formatted": "00:00",
+                "week_start": None,
+                "week_end": None,
+                "includes_current_timer": False,
+            }
+            
+        weekly_total = self.coordinator.data.get("weekly_total", 0)
+        weekly_duration = self.coordinator.data.get("weekly_duration", 0)
+        hours = weekly_total // 3600
+        minutes = (weekly_total % 3600) // 60
+        
+        return {
+            "duration_seconds": weekly_total,
+            "duration_formatted": f"{hours:02d}:{minutes:02d}",
+            "week_start": self.coordinator.data.get("week_start"),
+            "week_end": self.coordinator.data.get("week_end"),
+            "includes_current_timer": weekly_total > weekly_duration,
+            "completed_time_seconds": weekly_duration,
+        }
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
+
+class ClockifyDailyTotalSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Clockify daily total time sensor (including current timer)."""
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_daily_total"
+        self._attr_name = "Clockify Daily Total"
+        self._attr_icon = "mdi:calendar-today-outline"
+        self._attr_native_unit_of_measurement = "h"
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Clockify",
+            manufacturer="Clockify",
+            model="Time Tracker",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+        self._entry = entry
+
+    @property
+    def state(self) -> float | None:
+        """Return the state of the sensor."""
+        if not self.coordinator.data:
+            return 0
+            
+        daily_total = self.coordinator.data.get("daily_total", 0)
+        # Convert seconds to hours
+        return round(daily_total / 3600, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        if not self.coordinator.data:
+            return {
+                "duration_seconds": 0,
+                "duration_formatted": "00:00",
+                "date": None,
+                "includes_current_timer": False,
+            }
+            
+        daily_total = self.coordinator.data.get("daily_total", 0)
+        daily_duration = self.coordinator.data.get("daily_duration", 0)
+        hours = daily_total // 3600
+        minutes = (daily_total % 3600) // 60
+        
+        return {
+            "duration_seconds": daily_total,
+            "duration_formatted": f"{hours:02d}:{minutes:02d}",
+            "date": self.coordinator.data.get("current_date"),
+            "includes_current_timer": daily_total > daily_duration,
+            "completed_time_seconds": daily_duration,
         }
 
     @property

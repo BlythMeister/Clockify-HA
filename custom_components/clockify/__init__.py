@@ -86,6 +86,19 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     week_start = now.strftime("%Y-%m-%d")
                     week_end = now.strftime("%Y-%m-%d")
                 
+                # Calculate totals including current timer
+                current_timer_duration = 0
+                if current_timer and current_timer.get("timeInterval", {}).get("start"):
+                    try:
+                        start_time_str = current_timer["timeInterval"]["start"]
+                        start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+                        current_timer_duration = int((now - start_time).total_seconds())
+                    except (ValueError, KeyError):
+                        current_timer_duration = 0
+                
+                daily_total = daily_duration + current_timer_duration
+                weekly_total = weekly_duration + current_timer_duration
+                
                 # If there's an active timer, get project and task details
                 project_data = None
                 task_data = None
@@ -104,6 +117,8 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     "user": user_data,
                     "daily_duration": daily_duration,
                     "weekly_duration": weekly_duration,
+                    "daily_total": daily_total,
+                    "weekly_total": weekly_total,
                     "current_date": now.strftime("%Y-%m-%d"),
                     "week_start": week_start,
                     "week_end": week_end,
