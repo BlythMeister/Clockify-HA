@@ -1,0 +1,18 @@
+{
+  "config_flow": {
+    "user": {
+      "title": "Clockify Setup",
+      "description": "Enter your Clockify API credentials",
+      "data": {
+        "api_key": "API Key",
+        "workspace_id": "Workspace ID"
+      }
+    }
+  },
+  "error": {
+    "cannot_connect": "Failed to connect to Clockify API",
+    "invalid_auth": "Invalid API key",
+    "invalid_workspace": "Invalid workspace ID or no access to workspace",
+    "unknown": "Unexpected error occurred"
+  }
+}

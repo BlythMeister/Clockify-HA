@@ -1,1 +1,131 @@
-# Clockify-HA
+# Clockify Home Assistant Integration
+
+A custom Home Assistant integration to monitor your Clockify time tracking activities.
+
+## Features
+
+- **Current Timer Sensor**: Shows your currently active timer with project and task names
+- **Real-time Updates**: Automatically updates every 30 seconds
+- **Rich Attributes**: Provides detailed information about your active timer including:
+  - Project name and color
+  - Task name (if applicable)
+  - Timer description
+  - Start time and duration
+  - Billable status
+  - Tags
+
+## Installation
+
+### HACS (Recommended)
+
+1. Open HACS in your Home Assistant instance
+2. Click on "Integrations"
+3. Click the three dots in the top right corner and select "Custom repositories"
+4. Add this repository URL: `https://github.com/BlythMeister/Clockify-HA`
+5. Select "Integration" as the category
+6. Click "Add"
+7. Find "Clockify" in the integration list and click "Download"
+8. Restart Home Assistant
+
+### Manual Installation
+
+1. Copy the `custom_components/clockify` folder to your Home Assistant `custom_components` directory
+2. Restart Home Assistant
+
+## Configuration
+
+1. Go to Configuration > Integrations
+2. Click "Add Integration"
+3. Search for "Clockify"
+4. Enter your Clockify API key and Workspace ID
+
+### Getting Your API Key
+
+1. Go to [Clockify](https://clockify.me)
+2. Sign in to your account
+3. Go to your Profile settings (click your avatar in the top-right corner)
+4. Scroll down to the "API" section
+5. Copy your API key
+
+### Getting Your Workspace ID
+
+1. Go to your Clockify workspace
+2. Look at the URL in your browser
+3. The workspace ID is the string after `/workspaces/` in the URL
+4. Example: `https://app.clockify.me/workspaces/5f4f4f4f4f4f4f4f4f4f4f4f/dashboard`
+   - Workspace ID: `5f4f4f4f4f4f4f4f4f4f4f4f`
+
+## Sensors
+
+### `sensor.clockify_current_timer`
+
+Shows the current active timer with project and task names.
+
+**States:**
+
+- `"No active timer"` - When no timer is running
+- `"Project Name - Task Name"` - When a timer is active with a task
+- `"Project Name"` - When a timer is active without a task
+
+**Attributes:**
+
+- `status`: "active" or "inactive"
+- `description`: Timer description
+- `project_id`: Project ID
+- `project_name`: Project name
+- `project_color`: Project color (hex code)
+- `task_id`: Task ID (if applicable)
+- `task_name`: Task name (if applicable)
+- `start_time`: Timer start time (ISO format)
+- `duration`: Human-readable duration (HH:MM:SS)
+- `duration_seconds`: Duration in seconds
+- `billable`: Whether the timer is billable
+- `tags`: List of tag names
+
+## Example Automations
+
+### Notify when timer starts
+
+```yaml
+automation:
+  - alias: "Clockify Timer Started"
+    trigger:
+      - platform: state
+        entity_id: sensor.clockify_current_timer
+        from: "No active timer"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          title: "Timer Started"
+          message: "Started tracking time for {{ state_attr('sensor.clockify_current_timer', 'project_name') }}"
+```
+
+### Turn on focus lights when working
+
+```yaml
+automation:
+  - alias: "Focus Mode On"
+    trigger:
+      - platform: state
+        entity_id: sensor.clockify_current_timer
+        from: "No active timer"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.desk_light
+        data:
+          color_name: blue
+          brightness: 200
+```
+
+## Support
+
+If you encounter any issues or have feature requests, please [create an issue](https://github.com/BlythMeister/Clockify-HA/issues) on GitHub.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
