@@ -163,7 +163,7 @@ secondary: |
   {% if state_attr('sensor.clockify_current_timer', 'status') == 'active' %}
     {{ state_attr('sensor.clockify_current_timer', 'description') or 'No description' }}
     {% if state_attr('sensor.clockify_current_timer', 'duration') %}
-      • {{ state_attr('sensor.clockify_current_timer', 'duration') }}
+      • {{ state_attr('sensor.clockify_current_timer', 'duration')[:5] }}
     {% endif %}
   {% else %}
     Start a timer in Clockify to begin tracking
@@ -205,12 +205,10 @@ content: |
   📝 *{{ state_attr('sensor.clockify_current_timer', 'description') }}*
   {% endif %}
   
-  ⏱️ **Duration:** {{ state_attr('sensor.clockify_current_timer', 'duration') or 'Starting...' }}
+  ⏱️ **Duration:** {{ state_attr('sensor.clockify_current_timer', 'duration')[:5] if state_attr('sensor.clockify_current_timer', 'duration') else 'Starting...' }}
   
   {% if state_attr('sensor.clockify_current_timer', 'billable') %}
-  💰 **Billable** | 
-  {% endif %}
-  🏷️ {{ state_attr('sensor.clockify_current_timer', 'tags') | join(', ') if state_attr('sensor.clockify_current_timer', 'tags') else 'No tags' }}
+  💰 **Billable** | {% endif %} 🏷️ {{ state_attr('sensor.clockify_current_timer', 'tags') | join(', ') if state_attr('sensor.clockify_current_timer', 'tags') else 'No tags' }}
   
   ---
   ⏰ **Started:** {{ as_timestamp(state_attr('sensor.clockify_current_timer', 'start_time')) | timestamp_custom('%H:%M', true) if state_attr('sensor.clockify_current_timer', 'start_time') else 'Unknown' }}
@@ -218,9 +216,11 @@ content: |
   ## ⏸️ No Active Timer
   
   Start a timer in Clockify to begin tracking your work.
-  
-  📊 **Today:** {{ states('sensor.clockify_daily_time') }}h | **Week:** {{ states('sensor.clockify_weekly_time') }}h
   {% endif %}
+  
+  ## Totals
+
+  📊 **Today:** {{ state_attr('sensor.clockify_daily_total', 'duration_formatted') or '00:00' }} | **Week:** {{ state_attr('sensor.clockify_weekly_total', 'duration_formatted') or '00:00' }}
 ```
 
 ### Time Tracking Summary Card
@@ -235,11 +235,17 @@ entities:
     name: Current Timer
     icon: mdi:timer
   - entity: sensor.clockify_daily_time
-    name: Today's Total
+    name: Today's Completed
     icon: mdi:calendar-today
+  - entity: sensor.clockify_daily_total
+    name: Today's Total
+    icon: mdi:calendar-today-outline
   - entity: sensor.clockify_weekly_time
-    name: This Week's Total
+    name: Week's Completed
     icon: mdi:calendar-week
+  - entity: sensor.clockify_weekly_total
+    name: Week's Total
+    icon: mdi:calendar-week-begin
 state_color: true
 ```
 
@@ -254,10 +260,14 @@ entities:
   - entity: sensor.clockify_current_timer
     name: Current
   - entity: sensor.clockify_daily_time
-    name: Today
+    name: Today Done
+  - entity: sensor.clockify_daily_total
+    name: Today Total
   - entity: sensor.clockify_weekly_time
-    name: Week
-columns: 3
+    name: Week Done
+  - entity: sensor.clockify_weekly_total
+    name: Week Total
+columns: 5
 ```
 
 **Note:** The mushroom card example requires the [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) custom component from HACS.
