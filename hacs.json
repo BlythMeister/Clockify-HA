@@ -3,5 +3,6 @@
   "content_in_root": false,
   "render_readme": true,
   "domains": ["clockify"],
-  "homeassistant": "2023.1.0"
+  "homeassistant": "2023.1.0",
+  "logo": "https://clockify.me/assets/images/clockify-logo.svg"
 }
