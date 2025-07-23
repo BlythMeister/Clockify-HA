@@ -178,6 +178,13 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
                 "Fri": 0.0,
                 "Sat": 0.0,
                 "Sun": 0.0,
+                "Mon_formatted": "00:00",
+                "Tue_formatted": "00:00",
+                "Wed_formatted": "00:00",
+                "Thu_formatted": "00:00",
+                "Fri_formatted": "00:00",
+                "Sat_formatted": "00:00",
+                "Sun_formatted": "00:00",
             }
             
         weekly_duration = self.coordinator.data.get("weekly_duration", 0)
@@ -186,6 +193,7 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
         
         # Get daily breakdown (completed time only)
         daily_breakdown = self.coordinator.data.get("daily_breakdown", {})
+        daily_breakdown_formatted = self.coordinator.data.get("daily_breakdown_formatted", {})
         
         attributes = {
             "duration_seconds": weekly_duration,
@@ -197,6 +205,7 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
         # Add daily breakdown attributes
         for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             attributes[day] = daily_breakdown.get(day, 0.0)
+            attributes[f"{day}_formatted"] = daily_breakdown_formatted.get(day, "00:00")
         
         return attributes
 
@@ -307,6 +316,13 @@ class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
                 "Fri": 0.0,
                 "Sat": 0.0,
                 "Sun": 0.0,
+                "Mon_formatted": "00:00",
+                "Tue_formatted": "00:00",
+                "Wed_formatted": "00:00",
+                "Thu_formatted": "00:00",
+                "Fri_formatted": "00:00",
+                "Sat_formatted": "00:00",
+                "Sun_formatted": "00:00",
             }
             
         weekly_total = self.coordinator.data.get("weekly_total", 0)
@@ -316,6 +332,7 @@ class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
         
         # Get daily breakdown (including current timer)
         daily_breakdown_total = self.coordinator.data.get("daily_breakdown_total", {})
+        daily_breakdown_total_formatted = self.coordinator.data.get("daily_breakdown_total_formatted", {})
         
         attributes = {
             "duration_seconds": weekly_total,
@@ -329,6 +346,7 @@ class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
         # Add daily breakdown attributes
         for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             attributes[day] = daily_breakdown_total.get(day, 0.0)
+            attributes[f"{day}_formatted"] = daily_breakdown_total_formatted.get(day, "00:00")
         
         return attributes
 

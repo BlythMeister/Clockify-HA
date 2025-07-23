@@ -103,6 +103,13 @@ Shows the total time tracked for the current week (Monday to Sunday) from comple
 - `Fri`: Hours tracked on Friday (decimal format)
 - `Sat`: Hours tracked on Saturday (decimal format)
 - `Sun`: Hours tracked on Sunday (decimal format)
+- `Mon_formatted`: Hours tracked on Monday (HH:MM format)
+- `Tue_formatted`: Hours tracked on Tuesday (HH:MM format)
+- `Wed_formatted`: Hours tracked on Wednesday (HH:MM format)
+- `Thu_formatted`: Hours tracked on Thursday (HH:MM format)
+- `Fri_formatted`: Hours tracked on Friday (HH:MM format)
+- `Sat_formatted`: Hours tracked on Saturday (HH:MM format)
+- `Sun_formatted`: Hours tracked on Sunday (HH:MM format)
 
 ### `sensor.clockify_weekly_total`
 
@@ -125,6 +132,13 @@ Shows the total time tracked for the current week (Monday to Sunday) including a
 - `Fri`: Hours tracked on Friday including current timer if today (decimal format)
 - `Sat`: Hours tracked on Saturday including current timer if today (decimal format)
 - `Sun`: Hours tracked on Sunday including current timer if today (decimal format)
+- `Mon_formatted`: Hours tracked on Monday including current timer if today (HH:MM format)
+- `Tue_formatted`: Hours tracked on Tuesday including current timer if today (HH:MM format)
+- `Wed_formatted`: Hours tracked on Wednesday including current timer if today (HH:MM format)
+- `Thu_formatted`: Hours tracked on Thursday including current timer if today (HH:MM format)
+- `Fri_formatted`: Hours tracked on Friday including current timer if today (HH:MM format)
+- `Sat_formatted`: Hours tracked on Saturday including current timer if today (HH:MM format)
+- `Sun_formatted`: Hours tracked on Sunday including current timer if today (HH:MM format)
 
 ### `sensor.clockify_daily_time`
 
@@ -302,16 +316,16 @@ title: 📅 Weekly Breakdown
 content: |
   ## This Week's Daily Hours
   
-  **Monday:** {{ state_attr('sensor.clockify_weekly_total', 'Mon') or '0.0' }}h
-  **Tuesday:** {{ state_attr('sensor.clockify_weekly_total', 'Tue') or '0.0' }}h  
-  **Wednesday:** {{ state_attr('sensor.clockify_weekly_total', 'Wed') or '0.0' }}h
-  **Thursday:** {{ state_attr('sensor.clockify_weekly_total', 'Thu') or '0.0' }}h
-  **Friday:** {{ state_attr('sensor.clockify_weekly_total', 'Fri') or '0.0' }}h
-  **Saturday:** {{ state_attr('sensor.clockify_weekly_total', 'Sat') or '0.0' }}h
-  **Sunday:** {{ state_attr('sensor.clockify_weekly_total', 'Sun') or '0.0' }}h
+  **Monday:** {{ state_attr('sensor.clockify_weekly_total', 'Mon_formatted') or '00:00' }} ({{ state_attr('sensor.clockify_weekly_total', 'Mon') or '0.0' }}h)
+  **Tuesday:** {{ state_attr('sensor.clockify_weekly_total', 'Tue_formatted') or '00:00' }} ({{ state_attr('sensor.clockify_weekly_total', 'Tue') or '0.0' }}h)
+  **Wednesday:** {{ state_attr('sensor.clockify_weekly_total', 'Wed_formatted') or '00:00' }} ({{ state_attr('sensor.clockify_weekly_total', 'Wed') or '0.0' }}h)
+  **Thursday:** {{ state_attr('sensor.clockify_weekly_total', 'Thu_formatted') or '00:00' }} ({{ state_attr('sensor.clockify_weekly_total', 'Thu') or '0.0' }}h)
+  **Friday:** {{ state_attr('sensor.clockify_weekly_total', 'Fri_formatted') or '00:00' }} ({{ state_attr('sensor.clockify_weekly_total', 'Fri') or '0.0' }}h)
+  **Saturday:** {{ state_attr('sensor.clockify_weekly_total', 'Sat_formatted') or '00:00' }} ({{ state_attr('sensor.clockify_weekly_total', 'Sat') or '0.0' }}h)
+  **Sunday:** {{ state_attr('sensor.clockify_weekly_total', 'Sun_formatted') or '00:00' }} ({{ state_attr('sensor.clockify_weekly_total', 'Sun') or '0.0' }}h)
   
   ---
-  **Total:** {{ states('sensor.clockify_weekly_total') }}h
+  **Total:** {{ state_attr('sensor.clockify_weekly_total', 'duration_formatted') or '00:00' }} ({{ states('sensor.clockify_weekly_total') }}h)
   *({{ state_attr('sensor.clockify_weekly_total', 'week_start') }} to {{ state_attr('sensor.clockify_weekly_total', 'week_end') }})*
 ```
 

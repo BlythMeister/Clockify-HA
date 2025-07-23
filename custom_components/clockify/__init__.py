@@ -112,11 +112,13 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 
                 # Get daily breakdown for the week
                 try:
-                    daily_breakdown, daily_breakdown_total = await self._async_get_weekly_daily_breakdown(user_id, now, current_timer_duration)
+                    daily_breakdown, daily_breakdown_total, daily_breakdown_formatted, daily_breakdown_total_formatted = await self._async_get_weekly_daily_breakdown(user_id, now, current_timer_duration)
                 except Exception as err:
                     _LOGGER.warning(f"Error getting weekly daily breakdown: {err}")
                     daily_breakdown = {}
                     daily_breakdown_total = {}
+                    daily_breakdown_formatted = {}
+                    daily_breakdown_total_formatted = {}
                 
                 return {
                     "current_timer": current_timer,
@@ -132,6 +134,8 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     "week_end": week_end,
                     "daily_breakdown": daily_breakdown,
                     "daily_breakdown_total": daily_breakdown_total,
+                    "daily_breakdown_formatted": daily_breakdown_formatted,
+                    "daily_breakdown_total_formatted": daily_breakdown_total_formatted,
                 }
                 
         except Exception as err:
@@ -252,7 +256,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.warning(f"Error calculating weekly time: {err}")
             return 0, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
 
-    async def _async_get_weekly_daily_breakdown(self, user_id: str, date: datetime, current_timer_duration: int) -> tuple[dict[str, float], dict[str, float]]:
+    async def _async_get_weekly_daily_breakdown(self, user_id: str, date: datetime, current_timer_duration: int) -> tuple[dict[str, float], dict[str, float], dict[str, str], dict[str, str]]:
         """Get daily breakdown for the current week."""
         # Calculate start of week (Monday)
         days_since_monday = date.weekday()
@@ -260,6 +264,8 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         
         daily_breakdown = {}
         daily_breakdown_total = {}
+        daily_breakdown_formatted = {}
+        daily_breakdown_total_formatted = {}
         day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         
         try:
@@ -290,17 +296,28 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 # Convert to hours for display
                 daily_breakdown[day_name] = round(day_seconds / 3600, 2)
                 
+                # Format as HH:MM for display
+                hours = day_seconds // 3600
+                minutes = (day_seconds % 3600) // 60
+                daily_breakdown_formatted[day_name] = f"{hours:02d}:{minutes:02d}"
+                
                 # For total breakdown, add current timer if it's today
                 day_total_seconds = day_seconds
                 if day_date.date() == date.date():
                     day_total_seconds += current_timer_duration
                 
                 daily_breakdown_total[day_name] = round(day_total_seconds / 3600, 2)
+                
+                # Format total as HH:MM for display
+                total_hours = day_total_seconds // 3600
+                total_minutes = (day_total_seconds % 3600) // 60
+                daily_breakdown_total_formatted[day_name] = f"{total_hours:02d}:{total_minutes:02d}"
             
-            return daily_breakdown, daily_breakdown_total
+            return daily_breakdown, daily_breakdown_total, daily_breakdown_formatted, daily_breakdown_total_formatted
             
         except Exception as err:
             _LOGGER.warning(f"Error calculating daily breakdown: {err}")
             # Return empty breakdown with 0 hours for each day
             empty_breakdown = {day: 0.0 for day in day_names}
-            return empty_breakdown, empty_breakdown.copy()
+            empty_formatted = {day: "00:00" for day in day_names}
+            return empty_breakdown, empty_breakdown.copy(), empty_formatted, empty_formatted.copy()
