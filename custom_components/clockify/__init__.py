@@ -110,6 +110,14 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     if current_timer.get("taskId"):
                         task_data = await self._async_get_task(current_timer["projectId"], current_timer["taskId"])
                 
+                # Get daily breakdown for the week
+                try:
+                    daily_breakdown, daily_breakdown_total = await self._async_get_weekly_daily_breakdown(user_id, now, current_timer_duration)
+                except Exception as err:
+                    _LOGGER.warning(f"Error getting weekly daily breakdown: {err}")
+                    daily_breakdown = {}
+                    daily_breakdown_total = {}
+                
                 return {
                     "current_timer": current_timer,
                     "project": project_data,
@@ -122,6 +130,8 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     "current_date": now.strftime("%Y-%m-%d"),
                     "week_start": week_start,
                     "week_end": week_end,
+                    "daily_breakdown": daily_breakdown,
+                    "daily_breakdown_total": daily_breakdown_total,
                 }
                 
         except Exception as err:
@@ -241,3 +251,56 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.warning(f"Error calculating weekly time: {err}")
             return 0, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
+
+    async def _async_get_weekly_daily_breakdown(self, user_id: str, date: datetime, current_timer_duration: int) -> tuple[dict[str, float], dict[str, float]]:
+        """Get daily breakdown for the current week."""
+        # Calculate start of week (Monday)
+        days_since_monday = date.weekday()
+        week_start = date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_monday)
+        
+        daily_breakdown = {}
+        daily_breakdown_total = {}
+        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        
+        try:
+            for i, day_name in enumerate(day_names):
+                day_date = week_start + timedelta(days=i)
+                day_start = day_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+                
+                url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/user/{user_id}/time-entries"
+                headers = {"X-Api-Key": self.api_key}
+                params = {
+                    "start": day_start.isoformat().replace("+00:00", "Z"),
+                    "end": day_end.isoformat().replace("+00:00", "Z"),
+                }
+                
+                day_seconds = 0
+                async with self.session.get(url, headers=headers, params=params) as response:
+                    if response.status == 200:
+                        entries = await response.json()
+                        
+                        for entry in entries:
+                            time_interval = entry.get("timeInterval", {})
+                            if time_interval.get("start") and time_interval.get("end"):
+                                start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
+                                end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
+                                day_seconds += int((end - start).total_seconds())
+                
+                # Convert to hours for display
+                daily_breakdown[day_name] = round(day_seconds / 3600, 2)
+                
+                # For total breakdown, add current timer if it's today
+                day_total_seconds = day_seconds
+                if day_date.date() == date.date():
+                    day_total_seconds += current_timer_duration
+                
+                daily_breakdown_total[day_name] = round(day_total_seconds / 3600, 2)
+            
+            return daily_breakdown, daily_breakdown_total
+            
+        except Exception as err:
+            _LOGGER.warning(f"Error calculating daily breakdown: {err}")
+            # Return empty breakdown with 0 hours for each day
+            empty_breakdown = {day: 0.0 for day in day_names}
+            return empty_breakdown, empty_breakdown.copy()

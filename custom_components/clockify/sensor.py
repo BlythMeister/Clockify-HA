@@ -171,18 +171,34 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
                 "duration_formatted": "00:00",
                 "week_start": None,
                 "week_end": None,
+                "Mon": 0.0,
+                "Tue": 0.0,
+                "Wed": 0.0,
+                "Thu": 0.0,
+                "Fri": 0.0,
+                "Sat": 0.0,
+                "Sun": 0.0,
             }
             
         weekly_duration = self.coordinator.data.get("weekly_duration", 0)
         hours = weekly_duration // 3600
         minutes = (weekly_duration % 3600) // 60
         
-        return {
+        # Get daily breakdown (completed time only)
+        daily_breakdown = self.coordinator.data.get("daily_breakdown", {})
+        
+        attributes = {
             "duration_seconds": weekly_duration,
             "duration_formatted": f"{hours:02d}:{minutes:02d}",
             "week_start": self.coordinator.data.get("week_start"),
             "week_end": self.coordinator.data.get("week_end"),
         }
+        
+        # Add daily breakdown attributes
+        for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+            attributes[day] = daily_breakdown.get(day, 0.0)
+        
+        return attributes
 
     @property
     def available(self) -> bool:
@@ -284,6 +300,13 @@ class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
                 "week_start": None,
                 "week_end": None,
                 "includes_current_timer": False,
+                "Mon": 0.0,
+                "Tue": 0.0,
+                "Wed": 0.0,
+                "Thu": 0.0,
+                "Fri": 0.0,
+                "Sat": 0.0,
+                "Sun": 0.0,
             }
             
         weekly_total = self.coordinator.data.get("weekly_total", 0)
@@ -291,7 +314,10 @@ class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
         hours = weekly_total // 3600
         minutes = (weekly_total % 3600) // 60
         
-        return {
+        # Get daily breakdown (including current timer)
+        daily_breakdown_total = self.coordinator.data.get("daily_breakdown_total", {})
+        
+        attributes = {
             "duration_seconds": weekly_total,
             "duration_formatted": f"{hours:02d}:{minutes:02d}",
             "week_start": self.coordinator.data.get("week_start"),
@@ -299,6 +325,12 @@ class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
             "includes_current_timer": weekly_total > weekly_duration,
             "completed_time_seconds": weekly_duration,
         }
+        
+        # Add daily breakdown attributes
+        for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+            attributes[day] = daily_breakdown_total.get(day, 0.0)
+        
+        return attributes
 
     @property
     def available(self) -> bool:

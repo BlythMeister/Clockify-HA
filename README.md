@@ -86,7 +86,7 @@ Shows the current active timer with project and task names.
 
 ### `sensor.clockify_weekly_time`
 
-Shows the total time tracked for the current week (Monday to Sunday).
+Shows the total time tracked for the current week (Monday to Sunday) from completed time entries only.
 
 **State:** Total hours for the week (decimal format, e.g., 40.5)
 
@@ -96,10 +96,39 @@ Shows the total time tracked for the current week (Monday to Sunday).
 - `duration_formatted`: Human-readable duration (HH:MM)
 - `week_start`: Start date of the week (YYYY-MM-DD)
 - `week_end`: End date of the week (YYYY-MM-DD)
+- `Mon`: Hours tracked on Monday (decimal format)
+- `Tue`: Hours tracked on Tuesday (decimal format)
+- `Wed`: Hours tracked on Wednesday (decimal format)
+- `Thu`: Hours tracked on Thursday (decimal format)
+- `Fri`: Hours tracked on Friday (decimal format)
+- `Sat`: Hours tracked on Saturday (decimal format)
+- `Sun`: Hours tracked on Sunday (decimal format)
+
+### `sensor.clockify_weekly_total`
+
+Shows the total time tracked for the current week (Monday to Sunday) including any currently active timer.
+
+**State:** Total hours for the week (decimal format, e.g., 40.5)
+
+**Attributes:**
+
+- `duration_seconds`: Total duration in seconds
+- `duration_formatted`: Human-readable duration (HH:MM)
+- `week_start`: Start date of the week (YYYY-MM-DD)
+- `week_end`: End date of the week (YYYY-MM-DD)
+- `includes_current_timer`: Whether the current active timer is included
+- `completed_time_seconds`: Completed time entries only (excluding current timer)
+- `Mon`: Hours tracked on Monday including current timer if today (decimal format)
+- `Tue`: Hours tracked on Tuesday including current timer if today (decimal format)
+- `Wed`: Hours tracked on Wednesday including current timer if today (decimal format)
+- `Thu`: Hours tracked on Thursday including current timer if today (decimal format)
+- `Fri`: Hours tracked on Friday including current timer if today (decimal format)
+- `Sat`: Hours tracked on Saturday including current timer if today (decimal format)
+- `Sun`: Hours tracked on Sunday including current timer if today (decimal format)
 
 ### `sensor.clockify_daily_time`
 
-Shows the total time tracked for today.
+Shows the total time tracked for today from completed time entries only.
 
 **State:** Total hours for today (decimal format, e.g., 8.25)
 
@@ -108,6 +137,20 @@ Shows the total time tracked for today.
 - `duration_seconds`: Total duration in seconds
 - `duration_formatted`: Human-readable duration (HH:MM)
 - `date`: Current date (YYYY-MM-DD)
+
+### `sensor.clockify_daily_total`
+
+Shows the total time tracked for today including any currently active timer.
+
+**State:** Total hours for today (decimal format, e.g., 8.25)
+
+**Attributes:**
+
+- `duration_seconds`: Total duration in seconds
+- `duration_formatted`: Human-readable duration (HH:MM)
+- `date`: Current date (YYYY-MM-DD)
+- `includes_current_timer`: Whether the current active timer is included
+- `completed_time_seconds`: Completed time entries only (excluding current timer)
 
 ## Example Automations
 
@@ -247,6 +290,29 @@ entities:
     name: Week's Total
     icon: mdi:calendar-week-begin
 state_color: true
+```
+
+### Weekly Daily Breakdown Card
+
+View daily hours for the current week using the new daily breakdown attributes:
+
+```yaml
+type: markdown
+title: 📅 Weekly Breakdown
+content: |
+  ## This Week's Daily Hours
+  
+  **Monday:** {{ state_attr('sensor.clockify_weekly_total', 'Mon') or '0.0' }}h
+  **Tuesday:** {{ state_attr('sensor.clockify_weekly_total', 'Tue') or '0.0' }}h  
+  **Wednesday:** {{ state_attr('sensor.clockify_weekly_total', 'Wed') or '0.0' }}h
+  **Thursday:** {{ state_attr('sensor.clockify_weekly_total', 'Thu') or '0.0' }}h
+  **Friday:** {{ state_attr('sensor.clockify_weekly_total', 'Fri') or '0.0' }}h
+  **Saturday:** {{ state_attr('sensor.clockify_weekly_total', 'Sat') or '0.0' }}h
+  **Sunday:** {{ state_attr('sensor.clockify_weekly_total', 'Sun') or '0.0' }}h
+  
+  ---
+  **Total:** {{ states('sensor.clockify_weekly_total') }}h
+  *({{ state_attr('sensor.clockify_weekly_total', 'week_start') }} to {{ state_attr('sensor.clockify_weekly_total', 'week_end') }})*
 ```
 
 ### Minimal Timer Display
