@@ -2,7 +2,5 @@
   "name": "Clockify",
   "content_in_root": false,
   "render_readme": true,
-  "domains": ["clockify"],
-  "homeassistant": "2023.1.0",
-  "logo": "https://brands.home-assistant.io/clockify/icon.png"
+  "homeassistant": "2023.1.0"
 }
