@@ -145,7 +145,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 if current_timer and current_timer.get("timeInterval", {}).get("start"):
                     try:
                         # Check if current timer should be excluded from totals
-                        if not await self._should_exclude_time_entry(current_timer):
+                        if not await self._should_exclude_time_entry(current_timer, {}):
                             start_time_str = current_timer["timeInterval"]["start"]
                             start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
                             current_timer_duration = int((now - start_time).total_seconds())
@@ -244,7 +244,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 return None
             return await response.json()
 
-    async def _should_exclude_time_entry(self, entry: dict) -> bool:
+    async def _should_exclude_time_entry(self, entry: dict, project_cache: dict = None) -> bool:
         """Check if a time entry should be excluded from totals."""
         try:
             # Check if it's a BREAK type entry
@@ -254,7 +254,15 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             # Check if it's in a "Breaks" project
             project_id = entry.get("projectId")
             if project_id:
-                project_data = await self._async_get_project(project_id)
+                # Use cached project data if available
+                if project_cache and project_id in project_cache:
+                    project_data = project_cache[project_id]
+                else:
+                    project_data = await self._async_get_project(project_id)
+                    # Cache the result for future use
+                    if project_cache is not None:
+                        project_cache[project_id] = project_data
+                
                 if project_data and project_data.get("name", "").lower() == "breaks":
                     return True
             
@@ -283,10 +291,11 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 
                 entries = await response.json()
                 total_seconds = 0
+                project_cache = {}  # Cache projects for this calculation
                 
                 for entry in entries:
                     # Skip excluded entries (breaks)
-                    if await self._should_exclude_time_entry(entry):
+                    if await self._should_exclude_time_entry(entry, project_cache):
                         continue
                         
                     time_interval = entry.get("timeInterval", {})
@@ -323,10 +332,11 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 
                 entries = await response.json()
                 total_seconds = 0
+                project_cache = {}  # Cache projects for this calculation
                 
                 for entry in entries:
                     # Skip excluded entries (breaks)
-                    if await self._should_exclude_time_entry(entry):
+                    if await self._should_exclude_time_entry(entry, project_cache):
                         continue
                         
                     time_interval = entry.get("timeInterval", {})
@@ -354,6 +364,9 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         
         try:
+            # Create a shared project cache for all days to minimize API calls
+            project_cache = {}
+            
             for i, day_name in enumerate(day_names):
                 day_date = week_start + timedelta(days=i)
                 day_start = day_date.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -372,8 +385,8 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                         entries = await response.json()
                         
                         for entry in entries:
-                            # Skip excluded entries (breaks)
-                            if await self._should_exclude_time_entry(entry):
+                            # Skip excluded entries (breaks) - using shared cache
+                            if await self._should_exclude_time_entry(entry, project_cache):
                                 continue
                                 
                             time_interval = entry.get("timeInterval", {})
@@ -394,7 +407,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 day_total_seconds = day_seconds
                 if day_date.date() == date.date():
                     # Only add current timer duration if it's not a break timer
-                    if current_timer and not await self._should_exclude_time_entry(current_timer):
+                    if current_timer and not await self._should_exclude_time_entry(current_timer, project_cache):
                         day_total_seconds += current_timer_duration
                 
                 daily_breakdown_total[day_name] = round(day_total_seconds / 3600, 2)
