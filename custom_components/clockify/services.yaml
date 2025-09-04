@@ -1,0 +1,29 @@
+start_timer:
+  name: Start Timer
+  description: Start a new timer in Clockify
+  fields:
+    description:
+      name: Description
+      description: Description for the time entry (optional)
+      required: false
+      example: "Working on Home Assistant integration"
+      selector:
+        text:
+    project_id:
+      name: Project ID
+      description: Clockify project ID to assign to the timer (optional)
+      required: false
+      example: "5f9b3b3b9b3b3b3b3b3b3b3b"
+      selector:
+        text:
+    task_id:
+      name: Task ID
+      description: Clockify task ID to assign to the timer (optional)
+      required: false
+      example: "5f9b3b3b9b3b3b3b3b3b3b3c"
+      selector:
+        text:
+
+stop_timer:
+  name: Stop Timer
+  description: Stop the currently running timer in Clockify

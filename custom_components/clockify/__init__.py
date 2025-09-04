@@ -10,11 +10,17 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN, CONF_WORKSPACE_ID
+from .const import (
+    DOMAIN,
+    CONF_WORKSPACE_ID,
+    SERVICE_START_TIMER,
+    SERVICE_STOP_TIMER,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +38,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
     
+    # Register services
+    await _async_register_services(hass, coordinator)
+    
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     return True
@@ -40,8 +49,53 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
+        
+        # Unregister services if no more instances
+        if not hass.data[DOMAIN]:
+            hass.services.async_remove(DOMAIN, SERVICE_START_TIMER)
+            hass.services.async_remove(DOMAIN, SERVICE_STOP_TIMER)
     
     return unload_ok
+
+
+# Service schemas
+START_TIMER_SCHEMA = vol.Schema({
+    vol.Optional("description"): cv.string,
+    vol.Optional("project_id"): cv.string,
+    vol.Optional("task_id"): cv.string,
+})
+
+STOP_TIMER_SCHEMA = vol.Schema({})
+
+
+async def _async_register_services(hass: HomeAssistant, coordinator: ClockifyDataUpdateCoordinator) -> None:
+    """Register Clockify services."""
+    
+    async def async_start_timer(call: ServiceCall) -> None:
+        """Handle start timer service call."""
+        description = call.data.get("description")
+        project_id = call.data.get("project_id")
+        task_id = call.data.get("task_id")
+        
+        await coordinator.async_start_timer(description, project_id, task_id)
+    
+    async def async_stop_timer(call: ServiceCall) -> None:
+        """Handle stop timer service call."""
+        await coordinator.async_stop_timer()
+    
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_TIMER,
+        async_start_timer,
+        schema=START_TIMER_SCHEMA,
+    )
+    
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_STOP_TIMER,
+        async_stop_timer,
+        schema=STOP_TIMER_SCHEMA,
+    )
 
 class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the Clockify API."""
@@ -90,9 +144,13 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 current_timer_duration = 0
                 if current_timer and current_timer.get("timeInterval", {}).get("start"):
                     try:
-                        start_time_str = current_timer["timeInterval"]["start"]
-                        start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
-                        current_timer_duration = int((now - start_time).total_seconds())
+                        # Check if current timer should be excluded from totals
+                        if not await self._should_exclude_time_entry(current_timer):
+                            start_time_str = current_timer["timeInterval"]["start"]
+                            start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+                            current_timer_duration = int((now - start_time).total_seconds())
+                        else:
+                            current_timer_duration = 0
                     except (ValueError, KeyError):
                         current_timer_duration = 0
                 
@@ -112,7 +170,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 
                 # Get daily breakdown for the week
                 try:
-                    daily_breakdown, daily_breakdown_total, daily_breakdown_formatted, daily_breakdown_total_formatted = await self._async_get_weekly_daily_breakdown(user_id, now, current_timer_duration)
+                    daily_breakdown, daily_breakdown_total, daily_breakdown_formatted, daily_breakdown_total_formatted = await self._async_get_weekly_daily_breakdown(user_id, now, current_timer, current_timer_duration)
                 except Exception as err:
                     _LOGGER.warning(f"Error getting weekly daily breakdown: {err}")
                     daily_breakdown = {}
@@ -185,6 +243,25 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning(f"Error getting task {task_id}: {response.status}")
                 return None
             return await response.json()
+
+    async def _should_exclude_time_entry(self, entry: dict) -> bool:
+        """Check if a time entry should be excluded from totals."""
+        try:
+            # Check if it's a BREAK type entry
+            if entry.get("type") == "BREAK":
+                return True
+            
+            # Check if it's in a "Breaks" project
+            project_id = entry.get("projectId")
+            if project_id:
+                project_data = await self._async_get_project(project_id)
+                if project_data and project_data.get("name", "").lower() == "breaks":
+                    return True
+            
+            return False
+        except Exception as err:
+            _LOGGER.warning(f"Error checking if entry should be excluded: {err}")
+            return False
     
     async def _async_get_daily_time(self, user_id: str, date: datetime) -> int:
         """Get total time for today."""
@@ -208,6 +285,10 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 total_seconds = 0
                 
                 for entry in entries:
+                    # Skip excluded entries (breaks)
+                    if await self._should_exclude_time_entry(entry):
+                        continue
+                        
                     time_interval = entry.get("timeInterval", {})
                     if time_interval.get("start") and time_interval.get("end"):
                         start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
@@ -244,6 +325,10 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 total_seconds = 0
                 
                 for entry in entries:
+                    # Skip excluded entries (breaks)
+                    if await self._should_exclude_time_entry(entry):
+                        continue
+                        
                     time_interval = entry.get("timeInterval", {})
                     if time_interval.get("start") and time_interval.get("end"):
                         start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
@@ -256,7 +341,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.warning(f"Error calculating weekly time: {err}")
             return 0, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
 
-    async def _async_get_weekly_daily_breakdown(self, user_id: str, date: datetime, current_timer_duration: int) -> tuple[dict[str, float], dict[str, float], dict[str, str], dict[str, str]]:
+    async def _async_get_weekly_daily_breakdown(self, user_id: str, date: datetime, current_timer: dict, current_timer_duration: int) -> tuple[dict[str, float], dict[str, float], dict[str, str], dict[str, str]]:
         """Get daily breakdown for the current week."""
         # Calculate start of week (Monday)
         days_since_monday = date.weekday()
@@ -287,6 +372,10 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                         entries = await response.json()
                         
                         for entry in entries:
+                            # Skip excluded entries (breaks)
+                            if await self._should_exclude_time_entry(entry):
+                                continue
+                                
                             time_interval = entry.get("timeInterval", {})
                             if time_interval.get("start") and time_interval.get("end"):
                                 start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
@@ -301,10 +390,12 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 minutes = (day_seconds % 3600) // 60
                 daily_breakdown_formatted[day_name] = f"{hours:02d}:{minutes:02d}"
                 
-                # For total breakdown, add current timer if it's today
+                # For total breakdown, add current timer if it's today and not excluded
                 day_total_seconds = day_seconds
                 if day_date.date() == date.date():
-                    day_total_seconds += current_timer_duration
+                    # Only add current timer duration if it's not a break timer
+                    if current_timer and not await self._should_exclude_time_entry(current_timer):
+                        day_total_seconds += current_timer_duration
                 
                 daily_breakdown_total[day_name] = round(day_total_seconds / 3600, 2)
                 
@@ -321,3 +412,79 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             empty_breakdown = {day: 0.0 for day in day_names}
             empty_formatted = {day: "00:00" for day in day_names}
             return empty_breakdown, empty_breakdown.copy(), empty_formatted, empty_formatted.copy()
+
+    async def async_start_timer(self, description: str = None, project_id: str = None, task_id: str = None) -> bool:
+        """Start a new timer in Clockify."""
+        try:
+            url = f"https://api.clockify.me/api/v1/workspaces/{self._workspace_id}/time-entries"
+            
+            # Build the request payload
+            payload = {
+                "start": datetime.now(timezone.utc).isoformat(),
+            }
+            
+            if description:
+                payload["description"] = description
+            
+            if project_id:
+                payload["projectId"] = project_id
+            
+            if task_id:
+                payload["taskId"] = task_id
+            
+            headers = {
+                "X-Api-Key": self._api_key,
+                "Content-Type": "application/json"
+            }
+            
+            async with async_timeout.timeout(10):
+                async with self._session.post(url, json=payload, headers=headers) as response:
+                    if response.status == 201:
+                        _LOGGER.info("Timer started successfully")
+                        # Trigger immediate data update
+                        await self.async_request_refresh()
+                        return True
+                    else:
+                        response_text = await response.text()
+                        _LOGGER.error(f"Failed to start timer: {response.status} - {response_text}")
+                        return False
+                        
+        except Exception as err:
+            _LOGGER.error(f"Error starting timer: {err}")
+            return False
+
+    async def async_stop_timer(self) -> bool:
+        """Stop the currently running timer in Clockify."""
+        try:
+            # Get current user info to get the user ID
+            if not self.data or not self.data.get("user"):
+                _LOGGER.error("No user data available for stopping timer")
+                return False
+            
+            user_id = self.data["user"]["id"]
+            url = f"https://api.clockify.me/api/v1/workspaces/{self._workspace_id}/user/{user_id}/time-entries"
+            
+            payload = {
+                "end": datetime.now(timezone.utc).isoformat(),
+            }
+            
+            headers = {
+                "X-Api-Key": self._api_key,
+                "Content-Type": "application/json"
+            }
+            
+            async with async_timeout.timeout(10):
+                async with self._session.patch(url, json=payload, headers=headers) as response:
+                    if response.status == 200:
+                        _LOGGER.info("Timer stopped successfully")
+                        # Trigger immediate data update
+                        await self.async_request_refresh()
+                        return True
+                    else:
+                        response_text = await response.text()
+                        _LOGGER.error(f"Failed to stop timer: {response.status} - {response_text}")
+                        return False
+                        
+        except Exception as err:
+            _LOGGER.error(f"Error stopping timer: {err}")
+            return False

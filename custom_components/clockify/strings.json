@@ -14,5 +14,29 @@
     "invalid_auth": "Invalid API key",
     "invalid_workspace": "Invalid workspace ID or no access to workspace",
     "unknown": "Unexpected error occurred"
+  },
+  "services": {
+    "start_timer": {
+      "name": "Start Timer",
+      "description": "Start a new timer in Clockify",
+      "fields": {
+        "description": {
+          "name": "Description",
+          "description": "Description for the time entry (optional)"
+        },
+        "project_id": {
+          "name": "Project ID",
+          "description": "Clockify project ID to assign to the timer (optional)"
+        },
+        "task_id": {
+          "name": "Task ID",
+          "description": "Clockify task ID to assign to the timer (optional)"
+        }
+      }
+    },
+    "stop_timer": {
+      "name": "Stop Timer",
+      "description": "Stop the currently running timer in Clockify"
+    }
   }
 }

@@ -1,12 +1,14 @@
 # Clockify Home Assistant Integration
 
-A custom Home Assistant integration to monitor your Clockify time tracking activities.
+A custom Home Assistant integration to monitor and control your Clockify time tracking activities directly from Home Assistant.
 
 ## Features
 
 - **Current Timer Sensor**: Shows your currently active timer with project and task names
 - **Weekly Time Sensor**: Displays total time tracked for the current week (Monday to Sunday)
 - **Daily Time Sensor**: Shows total time tracked for today
+- **Timer Actions**: Start and stop timers directly from Home Assistant automations
+- **Break Time Exclusion**: Automatically excludes break time from all time calculations
 - **Real-time Updates**: Automatically updates every 30 seconds
 - **Rich Attributes**: Provides detailed information about your active timer including:
   - Project name and color
@@ -56,6 +58,12 @@ A custom Home Assistant integration to monitor your Clockify time tracking activ
 3. The workspace ID is the string after `/workspaces/` in the URL
 4. Example: `https://app.clockify.me/workspaces/5f4f4f4f4f4f4f4f4f4f4f4f/dashboard`
    - Workspace ID: `5f4f4f4f4f4f4f4f4f4f4f4f`
+
+### What's New
+
+- **🎯 Timer Actions**: Start and stop timers directly from Home Assistant using `clockify.start_timer` and `clockify.stop_timer` services
+- **☕ Break Time Exclusion**: All time calculations now automatically exclude break time for more accurate work tracking
+- **🤖 Enhanced Automations**: Create powerful automations to manage your time tracking based on location, schedule, or other Home Assistant entities
 
 ## Sensors
 
@@ -166,6 +174,64 @@ Shows the total time tracked for today including any currently active timer.
 - `includes_current_timer`: Whether the current active timer is included
 - `completed_time_seconds`: Completed time entries only (excluding current timer)
 
+## Timer Actions
+
+The integration provides services to start and stop timers directly from Home Assistant, enabling automation of your time tracking.
+
+### `clockify.start_timer`
+
+Start a new timer in Clockify with optional parameters.
+
+**Parameters:**
+
+- `description` (optional): Description for the time entry
+- `project_id` (optional): Clockify project ID to assign to the timer
+- `task_id` (optional): Clockify task ID to assign to the timer
+
+**Examples:**
+
+```yaml
+# Start a basic timer
+- service: clockify.start_timer
+
+# Start timer with description
+- service: clockify.start_timer
+  data:
+    description: "Working on Home Assistant integration"
+
+# Start timer with project and task
+- service: clockify.start_timer
+  data:
+    description: "Bug fixing"
+    project_id: "5f9b3b3b9b3b3b3b3b3b3b3b"
+    task_id: "5f9b3b3b9b3b3b3b3b3b3b3c"
+```
+
+### `clockify.stop_timer`
+
+Stop the currently running timer in Clockify.
+
+**Parameters:** None
+
+**Example:**
+
+```yaml
+# Stop the current timer
+- service: clockify.stop_timer
+```
+
+## Break Time Exclusion
+
+The integration automatically excludes break time from all time calculations to provide accurate work time tracking:
+
+- **Type-based exclusion**: Time entries with `type: "BREAK"` are excluded from totals
+- **Project-based exclusion**: Time entries in projects named "Breaks" are excluded from totals
+- **Current timer exclusion**: If the currently running timer is a break timer, it's excluded from current totals
+
+This ensures that all sensors (`clockify_daily_time`, `clockify_daily_total`, `clockify_weekly_time`, `clockify_weekly_total`) show only actual work time, not break periods.
+
+**Note:** Break time entries are still tracked in Clockify normally - they're only excluded from the Home Assistant sensor calculations for more accurate work time reporting.
+
 ## Example Automations
 
 ### Notify when timer starts
@@ -200,6 +266,96 @@ automation:
         data:
           color_name: blue
           brightness: 200
+```
+
+### Automatic work timer schedule
+
+```yaml
+automation:
+  - alias: "Start Work Timer at 9 AM"
+    trigger:
+      - platform: time
+        at: "09:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+    action:
+      - service: clockify.start_timer
+        data:
+          description: "Daily work session"
+          project_id: "your-work-project-id"
+
+  - alias: "Stop Work Timer at 5 PM"
+    trigger:
+      - platform: time
+        at: "17:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+    action:
+      - service: clockify.stop_timer
+```
+
+### Start timer when arriving at office
+
+```yaml
+automation:
+  - alias: "Start Timer When Arriving at Office"
+    trigger:
+      - platform: zone
+        entity_id: person.your_name
+        zone: zone.office
+        event: enter
+    condition:
+      - condition: time
+        after: "08:00:00"
+        before: "18:00:00"
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+    action:
+      - service: clockify.start_timer
+        data:
+          description: "Arrived at office"
+          project_id: "your-office-project-id"
+```
+
+### Smart break timer
+
+```yaml
+automation:
+  - alias: "Start Break Timer"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.motion_desk
+        to: "off"
+        for:
+          minutes: 15
+    condition:
+      - condition: state
+        entity_id: sensor.clockify_current_timer
+        state: "No active timer"
+        attribute: status
+        state: "active"
+    action:
+      - service: clockify.stop_timer
+      - service: clockify.start_timer
+        data:
+          description: "Break time"
+          project_id: "your-breaks-project-id"
 ```
 
 ## Example Lovelace Dashboard
