@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/BlythMeister/Clockify-HA/issues",
   "requirements": [],
   "version": "1.2.1",
-  "icon": "mdi:timer"
+  "icon": "https://brands.home-assistant.io/clockify/icon.png"
 }
