@@ -121,6 +121,9 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 user_data = await self._async_get_user()
                 user_id = user_data["id"]
                 
+                # Get user's week start day setting (MONDAY, SUNDAY, SATURDAY)
+                week_start_day = user_data.get("settings", {}).get("weekStart", "MONDAY")
+                
                 # Get user schedule settings for capacity calculations
                 user_schedule = await self._async_get_user_schedule_settings(user_id)
                 
@@ -136,7 +139,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     daily_duration = 0
                 
                 try:
-                    weekly_duration, week_start, week_end = await self._async_get_weekly_time(user_id, now)
+                    weekly_duration, week_start, week_end = await self._async_get_weekly_time(user_id, now, week_start_day)
                 except Exception as err:
                     _LOGGER.warning(f"Error getting weekly time: {err}")
                     weekly_duration = 0
@@ -173,7 +176,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 
                 # Get daily breakdown for the week
                 try:
-                    daily_breakdown, daily_breakdown_total, daily_breakdown_formatted, daily_breakdown_total_formatted = await self._async_get_weekly_daily_breakdown(user_id, now, current_timer, current_timer_duration)
+                    daily_breakdown, daily_breakdown_total, daily_breakdown_formatted, daily_breakdown_total_formatted = await self._async_get_weekly_daily_breakdown(user_id, now, current_timer, current_timer_duration, week_start_day)
                 except Exception as err:
                     _LOGGER.warning(f"Error getting weekly daily breakdown: {err}")
                     daily_breakdown = {}
@@ -182,7 +185,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     daily_breakdown_total_formatted = {}
                 
                 # Calculate expected hours and progress metrics
-                expected_hours = self._calculate_expected_hours(user_schedule, now)
+                expected_hours = self._calculate_expected_hours(user_schedule, now, week_start_day)
                 
                 # Daily progress metrics (for completed time)
                 daily_progress = self._calculate_progress_metrics(
@@ -243,6 +246,8 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     "weekly_expected_hours": expected_hours["weekly_expected_hours"],
                     "weekly_to_date_expected_seconds": expected_hours["weekly_to_date_expected_seconds"],
                     "weekly_to_date_expected_hours": expected_hours["weekly_to_date_expected_hours"],
+                    "weekly_remaining_expected_seconds": expected_hours["weekly_remaining_expected_seconds"],
+                    "weekly_remaining_expected_hours": expected_hours["weekly_remaining_expected_hours"],
                     "working_days": expected_hours["working_days"],
                     # Daily progress (completed only)
                     "daily_progress_percent": daily_progress["progress_percent"],
@@ -288,6 +293,62 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             if response.status != 200:
                 raise UpdateFailed(f"Error getting user: {response.status}")
             return await response.json()
+    
+    def _get_week_start_offset(self, week_start_day: str) -> int:
+        """
+        Get the offset for the week start day.
+        
+        Args:
+            week_start_day: One of 'MONDAY', 'SUNDAY', 'SATURDAY'
+            
+        Returns:
+            The weekday number (0=Monday, 6=Sunday) that starts the week
+        """
+        week_start_map = {
+            "MONDAY": 0,
+            "SUNDAY": 6,
+            "SATURDAY": 5,
+        }
+        return week_start_map.get(week_start_day, 0)  # Default to Monday
+    
+    def _get_week_day_order(self, week_start_day: str) -> list[str]:
+        """
+        Get the ordered list of day names starting from the configured week start.
+        
+        Args:
+            week_start_day: One of 'MONDAY', 'SUNDAY', 'SATURDAY'
+            
+        Returns:
+            List of day names in order starting from week_start_day
+        """
+        # Standard Python weekday order (0=Mon, 6=Sun)
+        standard_order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        
+        week_start_offset = self._get_week_start_offset(week_start_day)
+        
+        # Rotate the list to start from the configured week start
+        return standard_order[week_start_offset:] + standard_order[:week_start_offset]
+    
+    def _calculate_days_since_week_start(self, current_date: datetime, week_start_day: str) -> int:
+        """
+        Calculate how many days have passed since the start of the week.
+        
+        Args:
+            current_date: The current date
+            week_start_day: One of 'MONDAY', 'SUNDAY', 'SATURDAY'
+            
+        Returns:
+            Number of days since the week started (0 = week start day)
+        """
+        week_start_offset = self._get_week_start_offset(week_start_day)
+        current_weekday = current_date.weekday()  # 0=Monday, 6=Sunday
+        
+        # Calculate days since week start
+        if current_weekday >= week_start_offset:
+            return current_weekday - week_start_offset
+        else:
+            # Week wraps around (e.g., Sunday start, current day is Mon-Sat)
+            return 7 - week_start_offset + current_weekday
     
     async def _async_get_current_timer(self, user_id: str):
         """Get current active timer."""
@@ -340,8 +401,14 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.warning(f"Error fetching user schedule settings: {err}")
             return None
 
-    def _calculate_expected_hours(self, user_schedule: dict, current_date: datetime) -> dict:
-        """Calculate expected hours based on user schedule settings."""
+    def _calculate_expected_hours(self, user_schedule: dict, current_date: datetime, week_start_day: str = "MONDAY") -> dict:
+        """Calculate expected hours based on user schedule settings.
+        
+        Args:
+            user_schedule: User schedule settings from the API
+            current_date: The current date/time
+            week_start_day: The day the week starts ('MONDAY', 'SUNDAY', or 'SATURDAY')
+        """
         result = {
             "daily_expected_seconds": 0,
             "daily_expected_hours": 0.0,
@@ -349,6 +416,8 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             "weekly_expected_hours": 0.0,
             "weekly_to_date_expected_seconds": 0,
             "weekly_to_date_expected_hours": 0.0,
+            "weekly_remaining_expected_seconds": 0,
+            "weekly_remaining_expected_hours": 0.0,
             "working_days": [],
         }
         
@@ -364,10 +433,19 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             result["weekly_expected_hours"] = 40.0
             
             # Calculate to-date (only count working days up to today)
-            days_since_monday = current_date.weekday()
-            working_days_to_date = min(days_since_monday + 1, 5)  # Max 5 working days
+            days_since_week_start = self._calculate_days_since_week_start(current_date, week_start_day)
+            week_day_order = self._get_week_day_order(week_start_day)
+            working_days_to_date = min(days_since_week_start + 1, 5)  # Max 5 working days
             result["weekly_to_date_expected_seconds"] = working_days_to_date * 8 * 3600
             result["weekly_to_date_expected_hours"] = working_days_to_date * 8.0
+            
+            # Calculate remaining (only count working days after today)
+            working_days_remaining = 0
+            for i in range(days_since_week_start + 1, 7):  # Days after today
+                if week_day_order[i] in ["Mon", "Tue", "Wed", "Thu", "Fri"]:
+                    working_days_remaining += 1
+            result["weekly_remaining_expected_seconds"] = working_days_remaining * 8 * 3600
+            result["weekly_remaining_expected_hours"] = working_days_remaining * 8.0
             
             return result
         
@@ -415,16 +493,25 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 result["weekly_expected_hours"] = len(working_days) * float(hours_per_day)
                 
                 # Calculate expected hours for week to date
-                days_since_monday = current_date.weekday()
-                week_day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                days_since_week_start = self._calculate_days_since_week_start(current_date, week_start_day)
+                week_day_order = self._get_week_day_order(week_start_day)
                 working_days_to_date = 0
                 
-                for i in range(days_since_monday + 1):
-                    if week_day_names[i] in working_days:
+                for i in range(days_since_week_start + 1):
+                    if week_day_order[i] in working_days:
                         working_days_to_date += 1
                 
                 result["weekly_to_date_expected_seconds"] = working_days_to_date * int(hours_per_day * 3600)
                 result["weekly_to_date_expected_hours"] = working_days_to_date * float(hours_per_day)
+                
+                # Calculate expected hours for remaining days of the week (after today)
+                working_days_remaining = 0
+                for i in range(days_since_week_start + 1, 7):  # Days after today until end of week
+                    if week_day_order[i] in working_days:
+                        working_days_remaining += 1
+                
+                result["weekly_remaining_expected_seconds"] = working_days_remaining * int(hours_per_day * 3600)
+                result["weekly_remaining_expected_hours"] = working_days_remaining * float(hours_per_day)
                 
                 return result
         
@@ -471,17 +558,27 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         result["weekly_expected_hours"] = total_weekly_hours
         
         # Calculate expected hours for week to date
-        days_since_monday = current_date.weekday()
-        week_day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        days_since_week_start = self._calculate_days_since_week_start(current_date, week_start_day)
+        week_day_order = self._get_week_day_order(week_start_day)
         week_to_date_hours = 0
         
-        for i in range(days_since_monday + 1):  # Include today
-            day_name = week_day_names[i]
+        for i in range(days_since_week_start + 1):  # Include today
+            day_name = week_day_order[i]
             if day_name in daily_hours:
                 week_to_date_hours += daily_hours[day_name]
         
         result["weekly_to_date_expected_seconds"] = int(week_to_date_hours * 3600)
         result["weekly_to_date_expected_hours"] = week_to_date_hours
+        
+        # Calculate expected hours for remaining days of the week (after today)
+        week_remaining_hours = 0
+        for i in range(days_since_week_start + 1, 7):  # Days after today until end of week
+            day_name = week_day_order[i]
+            if day_name in daily_hours:
+                week_remaining_hours += daily_hours[day_name]
+        
+        result["weekly_remaining_expected_seconds"] = int(week_remaining_hours * 3600)
+        result["weekly_remaining_expected_hours"] = week_remaining_hours
         
         return result
     
@@ -599,11 +696,17 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.warning(f"Error calculating daily time: {err}")
             return 0
     
-    async def _async_get_weekly_time(self, user_id: str, date: datetime) -> tuple[int, str, str]:
-        """Get total time for this week."""
-        # Calculate start of week (Monday)
-        days_since_monday = date.weekday()
-        week_start = date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_monday)
+    async def _async_get_weekly_time(self, user_id: str, date: datetime, week_start_day: str = "MONDAY") -> tuple[int, str, str]:
+        """Get total time for this week.
+        
+        Args:
+            user_id: The user ID
+            date: The current date
+            week_start_day: The day the week starts ('MONDAY', 'SUNDAY', or 'SATURDAY')
+        """
+        # Calculate start of week based on user's week start setting
+        days_since_week_start = self._calculate_days_since_week_start(date, week_start_day)
+        week_start = date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_week_start)
         week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59, microseconds=999999)
         
         url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/user/{user_id}/time-entries"
@@ -640,23 +743,31 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.warning(f"Error calculating weekly time: {err}")
             return 0, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
 
-    async def _async_get_weekly_daily_breakdown(self, user_id: str, date: datetime, current_timer: dict, current_timer_duration: int) -> tuple[dict[str, float], dict[str, float], dict[str, str], dict[str, str]]:
-        """Get daily breakdown for the current week."""
-        # Calculate start of week (Monday)
-        days_since_monday = date.weekday()
-        week_start = date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_monday)
+    async def _async_get_weekly_daily_breakdown(self, user_id: str, date: datetime, current_timer: dict, current_timer_duration: int, week_start_day: str = "MONDAY") -> tuple[dict[str, float], dict[str, float], dict[str, str], dict[str, str]]:
+        """Get daily breakdown for the current week.
+        
+        Args:
+            user_id: The user ID
+            date: The current date
+            current_timer: The current active timer
+            current_timer_duration: Duration of the current timer in seconds
+            week_start_day: The day the week starts ('MONDAY', 'SUNDAY', or 'SATURDAY')
+        """
+        # Calculate start of week based on user's week start setting
+        days_since_week_start = self._calculate_days_since_week_start(date, week_start_day)
+        week_start = date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_week_start)
         
         daily_breakdown = {}
         daily_breakdown_total = {}
         daily_breakdown_formatted = {}
         daily_breakdown_total_formatted = {}
-        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        week_day_order = self._get_week_day_order(week_start_day)
         
         try:
             # Create a shared project cache for all days to minimize API calls
             project_cache = {}
             
-            for i, day_name in enumerate(day_names):
+            for i, day_name in enumerate(week_day_order):
                 day_date = week_start + timedelta(days=i)
                 day_start = day_date.replace(hour=0, minute=0, second=0, microsecond=0)
                 day_end = day_date.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -711,8 +822,8 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.warning(f"Error calculating daily breakdown: {err}")
             # Return empty breakdown with 0 hours for each day
-            empty_breakdown = {day: 0.0 for day in day_names}
-            empty_formatted = {day: "00:00" for day in day_names}
+            empty_breakdown = {day: 0.0 for day in week_day_order}
+            empty_formatted = {day: "00:00" for day in week_day_order}
             return empty_breakdown, empty_breakdown.copy(), empty_formatted, empty_formatted.copy()
 
     async def async_start_timer(self, description: str = None, project_id: str = None, task_id: str = None) -> bool:
