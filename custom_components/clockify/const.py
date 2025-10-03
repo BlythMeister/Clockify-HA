@@ -10,3 +10,4 @@ DEFAULT_SCAN_INTERVAL = 30
 # Service constants
 SERVICE_START_TIMER = "start_timer"
 SERVICE_STOP_TIMER = "stop_timer"
+

@@ -7,6 +7,11 @@ A custom Home Assistant integration to monitor and control your Clockify time tr
 - **Current Timer Sensor**: Shows your currently active timer with project and task names
 - **Weekly Time Sensor**: Displays total time tracked for the current week (Monday to Sunday)
 - **Daily Time Sensor**: Shows total time tracked for today
+- **Progress Tracking**: Automatic progress tracking based on your Clockify workspace settings
+  - Daily and weekly progress percentages
+  - Remaining time calculations
+  - Expected hours based on your configured work capacity
+  - Week-to-date vs full week progress metrics
 - **Timer Actions**: Start and stop timers directly from Home Assistant automations
 - **Break Time Exclusion**: Automatically excludes break time from all time calculations
 - **Real-time Updates**: Automatically updates every 30 seconds
@@ -61,6 +66,7 @@ A custom Home Assistant integration to monitor and control your Clockify time tr
 
 ### What's New
 
+- **📊 Progress Tracking**: All sensors now include automatic progress tracking based on your Clockify workspace settings - see how you're tracking against your daily/weekly goals with percentage complete and remaining time
 - **🎯 Timer Actions**: Start and stop timers directly from Home Assistant using `clockify.start_timer` and `clockify.stop_timer` services
 - **☕ Break Time Exclusion**: All time calculations now automatically exclude break time for more accurate work tracking
 - **🤖 Enhanced Automations**: Create powerful automations to manage your time tracking based on location, schedule, or other Home Assistant entities
@@ -118,6 +124,16 @@ Shows the total time tracked for the current week (Monday to Sunday) from comple
 - `Fri_formatted`: Hours tracked on Friday (HH:MM format)
 - `Sat_formatted`: Hours tracked on Saturday (HH:MM format)
 - `Sun_formatted`: Hours tracked on Sunday (HH:MM format)
+- **Progress Tracking:**
+  - `expected_hours`: Expected work hours for the full week
+  - `expected_hours_to_date`: Expected work hours from Monday to today
+  - `progress_percent`: Progress percentage against full week's expected hours
+  - `progress_percent_to_date`: Progress percentage against week-to-date expected hours
+  - `remaining_hours`: Hours remaining to meet full week goal
+  - `remaining_hours_to_date`: Hours remaining to meet week-to-date goal
+  - `remaining_formatted`: Remaining time for full week (HH:MM format)
+  - `remaining_formatted_to_date`: Remaining time for week-to-date (HH:MM format)
+  - `working_days`: List of working days from Clockify settings (e.g., ["Mon", "Tue", "Wed", "Thu", "Fri"])
 
 ### `sensor.clockify_weekly_total`
 
@@ -147,6 +163,16 @@ Shows the total time tracked for the current week (Monday to Sunday) including a
 - `Fri_formatted`: Hours tracked on Friday including current timer if today (HH:MM format)
 - `Sat_formatted`: Hours tracked on Saturday including current timer if today (HH:MM format)
 - `Sun_formatted`: Hours tracked on Sunday including current timer if today (HH:MM format)
+- **Progress Tracking:**
+  - `expected_hours`: Expected work hours for the full week
+  - `expected_hours_to_date`: Expected work hours from Monday to today
+  - `progress_percent`: Progress percentage against full week's expected hours
+  - `progress_percent_to_date`: Progress percentage against week-to-date expected hours
+  - `remaining_hours`: Hours remaining to meet full week goal
+  - `remaining_hours_to_date`: Hours remaining to meet week-to-date goal
+  - `remaining_formatted`: Remaining time for full week (HH:MM format)
+  - `remaining_formatted_to_date`: Remaining time for week-to-date (HH:MM format)
+  - `working_days`: List of working days from Clockify settings (e.g., ["Mon", "Tue", "Wed", "Thu", "Fri"])
 
 ### `sensor.clockify_daily_time`
 
@@ -159,6 +185,11 @@ Shows the total time tracked for today from completed time entries only.
 - `duration_seconds`: Total duration in seconds
 - `duration_formatted`: Human-readable duration (HH:MM)
 - `date`: Current date (YYYY-MM-DD)
+- **Progress Tracking:**
+  - `expected_hours`: Expected work hours for today (0 if not a working day)
+  - `progress_percent`: Progress percentage against expected hours for today
+  - `remaining_hours`: Hours remaining to meet daily goal
+  - `remaining_formatted`: Remaining time in HH:MM format
 
 ### `sensor.clockify_daily_total`
 
@@ -173,6 +204,11 @@ Shows the total time tracked for today including any currently active timer.
 - `date`: Current date (YYYY-MM-DD)
 - `includes_current_timer`: Whether the current active timer is included
 - `completed_time_seconds`: Completed time entries only (excluding current timer)
+- **Progress Tracking:**
+  - `expected_hours`: Expected work hours for today (0 if not a working day)
+  - `progress_percent`: Progress percentage against expected hours for today
+  - `remaining_hours`: Hours remaining to meet daily goal
+  - `remaining_formatted`: Remaining time in HH:MM format
 
 ## Timer Actions
 
@@ -231,6 +267,76 @@ The integration automatically excludes break time from all time calculations to 
 This ensures that all sensors (`clockify_daily_time`, `clockify_daily_total`, `clockify_weekly_time`, `clockify_weekly_total`) show only actual work time, not break periods.
 
 **Note:** Break time entries are still tracked in Clockify normally - they're only excluded from the Home Assistant sensor calculations for more accurate work time reporting.
+
+## Progress Tracking
+
+All time sensors now include automatic progress tracking based on your Clockify workspace settings. The integration fetches your configured working days and daily work capacity directly from Clockify, so there's no additional configuration needed in Home Assistant.
+
+### How It Works
+
+1. **Workspace Settings**: The integration fetches your workweek configuration from Clockify (working days and hours per day)
+2. **Automatic Calculations**: Expected hours are calculated based on whether today is a working day and how many working days are in the current week
+3. **Progress Metrics**: Each sensor provides progress percentages, remaining time, and expected hours
+
+### Daily Progress
+
+The daily sensors (`clockify_daily_time` and `clockify_daily_total`) include:
+
+- **Expected Hours**: Hours you should work today (based on Clockify settings, 0 if it's not a working day)
+- **Progress Percent**: How much of your daily goal is complete (e.g., 75.0%)
+- **Remaining Hours**: Hours left to meet your daily goal
+- **Remaining Formatted**: Remaining time in HH:MM format
+
+**Example**: If you're configured for 8-hour days and have logged 6 hours:
+- `expected_hours`: 8.0
+- `progress_percent`: 75.0
+- `remaining_hours`: 2.0
+- `remaining_formatted`: "02:00"
+
+### Weekly Progress
+
+The weekly sensors (`clockify_weekly_time` and `clockify_weekly_total`) include two types of progress tracking:
+
+#### Full Week Progress
+Compares your logged time against the full week's expected hours:
+- `expected_hours`: Total expected hours for the week (e.g., 40 hours for 5-day week)
+- `progress_percent`: Progress against full week's goal
+- `remaining_hours`: Hours remaining to meet full week goal
+- `remaining_formatted`: Remaining time in HH:MM format
+
+#### Week-to-Date Progress
+Compares your logged time against expected hours from Monday to today:
+- `expected_hours_to_date`: Expected hours from Monday to today
+- `progress_percent_to_date`: Progress against week-to-date goal
+- `remaining_hours_to_date`: Hours remaining to meet week-to-date goal  
+- `remaining_formatted_to_date`: Remaining time in HH:MM format
+
+**Example**: On Wednesday of a 5-day work week (8 hours/day):
+- Full Week: `expected_hours`: 40.0, comparing against full week
+- To-Date: `expected_hours_to_date`: 24.0 (Mon+Tue+Wed), comparing against what you should have done by now
+
+### Default Settings
+
+If workspace settings can't be fetched from Clockify:
+- Defaults to 8 hours per day
+- Defaults to Monday-Friday as working days
+- A warning is logged but the integration continues to function normally
+
+### Use Cases
+
+**Track Daily Progress:**
+```yaml
+- Create a dashboard gauge showing daily progress percentage
+- Set up notifications when you reach 100% of your daily goal
+- Monitor if you're on track throughout the day
+```
+
+**Monitor Weekly Goals:**
+```yaml
+- Use week-to-date progress to see if you're keeping pace
+- Compare full week progress to plan remaining days
+- Create automations based on progress thresholds
+```
 
 ## Example Automations
 
@@ -358,6 +464,49 @@ automation:
           project_id: "your-breaks-project-id"
 ```
 
+### Daily goal achieved notification
+
+```yaml
+automation:
+  - alias: "Daily Work Goal Reached"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.clockify_daily_total
+        attribute: progress_percent
+        above: 100
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          title: "🎉 Daily Goal Reached!"
+          message: "You've completed {{ states('sensor.clockify_daily_total') }} hours today. Great work!"
+```
+
+### Weekly progress check
+
+```yaml
+automation:
+  - alias: "Weekly Progress Report"
+    trigger:
+      - platform: time
+        at: "17:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - fri
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          title: "📊 Weekly Progress Report"
+          message: >
+            This week you've logged {{ states('sensor.clockify_weekly_total') }} hours
+            ({{ state_attr('sensor.clockify_weekly_total', 'progress_percent') }}% of your goal).
+            {% if state_attr('sensor.clockify_weekly_total', 'progress_percent') | float < 100 %}
+            You have {{ state_attr('sensor.clockify_weekly_total', 'remaining_formatted') }} remaining.
+            {% else %}
+            You've exceeded your weekly goal! 🎉
+            {% endif %}
+```
+
 ## Example Lovelace Dashboard
 
 ### Current Timer Status Card
@@ -483,6 +632,45 @@ content: |
   ---
   **Total:** {{ state_attr('sensor.clockify_weekly_total', 'duration_formatted') or '00:00' }} ({{ states('sensor.clockify_weekly_total') }}h)
   *({{ state_attr('sensor.clockify_weekly_total', 'week_start') }} to {{ state_attr('sensor.clockify_weekly_total', 'week_end') }})*
+```
+
+### Progress Tracking Dashboard
+
+Display your daily and weekly progress with visual indicators:
+
+```yaml
+type: markdown
+title: 📊 Work Progress Tracker
+content: |
+  ## Today's Progress
+  **Logged:** {{ state_attr('sensor.clockify_daily_total', 'duration_formatted') or '00:00' }}
+  **Expected:** {{ state_attr('sensor.clockify_daily_total', 'expected_hours') or '0.0' }}h
+  **Progress:** {{ state_attr('sensor.clockify_daily_total', 'progress_percent') or '0.0' }}%
+  {% if state_attr('sensor.clockify_daily_total', 'remaining_hours') | float > 0 %}
+  **Remaining:** {{ state_attr('sensor.clockify_daily_total', 'remaining_formatted') or '00:00' }}
+  {% else %}
+  ✅ **Daily goal reached!**
+  {% endif %}
+  
+  ---
+  
+  ## This Week's Progress
+  **Logged:** {{ state_attr('sensor.clockify_weekly_total', 'duration_formatted') or '00:00' }}
+  **Expected (Full Week):** {{ state_attr('sensor.clockify_weekly_total', 'expected_hours') or '0.0' }}h
+  **Expected (To Date):** {{ state_attr('sensor.clockify_weekly_total', 'expected_hours_to_date') or '0.0' }}h
+  
+  **Full Week Progress:** {{ state_attr('sensor.clockify_weekly_total', 'progress_percent') or '0.0' }}%
+  **Week-to-Date Progress:** {{ state_attr('sensor.clockify_weekly_total', 'progress_percent_to_date') or '0.0' }}%
+  
+  {% if state_attr('sensor.clockify_weekly_total', 'progress_percent_to_date') | float >= 100 %}
+  ✅ **On track for this week!**
+  {% elif state_attr('sensor.clockify_weekly_total', 'progress_percent_to_date') | float >= 90 %}
+  ⚠️ **Nearly on track** ({{ state_attr('sensor.clockify_weekly_total', 'remaining_formatted_to_date') }} remaining for today)
+  {% else %}
+  ⏰ **Behind schedule** ({{ state_attr('sensor.clockify_weekly_total', 'remaining_formatted_to_date') }} remaining to catch up)
+  {% endif %}
+  
+  **Working Days:** {{ state_attr('sensor.clockify_weekly_total', 'working_days') | join(', ') }}
 ```
 
 ### Minimal Timer Display

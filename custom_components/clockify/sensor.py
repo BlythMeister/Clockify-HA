@@ -185,6 +185,19 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
                 "Fri_formatted": "00:00",
                 "Sat_formatted": "00:00",
                 "Sun_formatted": "00:00",
+                "expected_hours": 0.0,
+                "expected_seconds": 0,
+                "expected_hours_to_date": 0.0,
+                "expected_seconds_to_date": 0,
+                "progress_percent": 0.0,
+                "progress_percent_to_date": 0.0,
+                "remaining_hours": 0.0,
+                "remaining_seconds": 0,
+                "remaining_formatted": "00:00",
+                "remaining_hours_to_date": 0.0,
+                "remaining_seconds_to_date": 0,
+                "remaining_formatted_to_date": "00:00",
+                "working_days": [],
             }
             
         weekly_duration = self.coordinator.data.get("weekly_duration", 0)
@@ -200,6 +213,19 @@ class ClockifyWeeklyTimeSensor(CoordinatorEntity, SensorEntity):
             "duration_formatted": f"{hours:02d}:{minutes:02d}",
             "week_start": self.coordinator.data.get("week_start"),
             "week_end": self.coordinator.data.get("week_end"),
+            "expected_hours": self.coordinator.data.get("weekly_expected_hours", 0.0),
+            "expected_seconds": self.coordinator.data.get("weekly_expected_seconds", 0),
+            "expected_hours_to_date": self.coordinator.data.get("weekly_to_date_expected_hours", 0.0),
+            "expected_seconds_to_date": self.coordinator.data.get("weekly_to_date_expected_seconds", 0),
+            "progress_percent": self.coordinator.data.get("weekly_progress_percent", 0.0),
+            "progress_percent_to_date": self.coordinator.data.get("weekly_to_date_progress_percent", 0.0),
+            "remaining_hours": self.coordinator.data.get("weekly_remaining_hours", 0.0),
+            "remaining_seconds": self.coordinator.data.get("weekly_remaining_seconds", 0),
+            "remaining_formatted": self.coordinator.data.get("weekly_remaining_formatted", "00:00"),
+            "remaining_hours_to_date": self.coordinator.data.get("weekly_to_date_remaining_hours", 0.0),
+            "remaining_seconds_to_date": self.coordinator.data.get("weekly_to_date_remaining_seconds", 0),
+            "remaining_formatted_to_date": self.coordinator.data.get("weekly_to_date_remaining_formatted", "00:00"),
+            "working_days": self.coordinator.data.get("working_days", []),
         }
         
         # Add daily breakdown attributes
@@ -252,6 +278,12 @@ class ClockifyDailyTimeSensor(CoordinatorEntity, SensorEntity):
                 "duration_seconds": 0,
                 "duration_formatted": "00:00",
                 "date": None,
+                "expected_hours": 0.0,
+                "expected_seconds": 0,
+                "progress_percent": 0.0,
+                "remaining_hours": 0.0,
+                "remaining_seconds": 0,
+                "remaining_formatted": "00:00",
             }
             
         daily_duration = self.coordinator.data.get("daily_duration", 0)
@@ -262,6 +294,12 @@ class ClockifyDailyTimeSensor(CoordinatorEntity, SensorEntity):
             "duration_seconds": daily_duration,
             "duration_formatted": f"{hours:02d}:{minutes:02d}",
             "date": self.coordinator.data.get("current_date"),
+            "expected_hours": self.coordinator.data.get("daily_expected_hours", 0.0),
+            "expected_seconds": self.coordinator.data.get("daily_expected_seconds", 0),
+            "progress_percent": self.coordinator.data.get("daily_progress_percent", 0.0),
+            "remaining_hours": self.coordinator.data.get("daily_remaining_hours", 0.0),
+            "remaining_seconds": self.coordinator.data.get("daily_remaining_seconds", 0),
+            "remaining_formatted": self.coordinator.data.get("daily_remaining_formatted", "00:00"),
         }
 
     @property
@@ -323,6 +361,19 @@ class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
                 "Fri_formatted": "00:00",
                 "Sat_formatted": "00:00",
                 "Sun_formatted": "00:00",
+                "expected_hours": 0.0,
+                "expected_seconds": 0,
+                "expected_hours_to_date": 0.0,
+                "expected_seconds_to_date": 0,
+                "progress_percent": 0.0,
+                "progress_percent_to_date": 0.0,
+                "remaining_hours": 0.0,
+                "remaining_seconds": 0,
+                "remaining_formatted": "00:00",
+                "remaining_hours_to_date": 0.0,
+                "remaining_seconds_to_date": 0,
+                "remaining_formatted_to_date": "00:00",
+                "working_days": [],
             }
             
         weekly_total = self.coordinator.data.get("weekly_total", 0)
@@ -341,6 +392,19 @@ class ClockifyWeeklyTotalSensor(CoordinatorEntity, SensorEntity):
             "week_end": self.coordinator.data.get("week_end"),
             "includes_current_timer": weekly_total > weekly_duration,
             "completed_time_seconds": weekly_duration,
+            "expected_hours": self.coordinator.data.get("weekly_expected_hours", 0.0),
+            "expected_seconds": self.coordinator.data.get("weekly_expected_seconds", 0),
+            "expected_hours_to_date": self.coordinator.data.get("weekly_to_date_expected_hours", 0.0),
+            "expected_seconds_to_date": self.coordinator.data.get("weekly_to_date_expected_seconds", 0),
+            "progress_percent": self.coordinator.data.get("weekly_total_progress_percent", 0.0),
+            "progress_percent_to_date": self.coordinator.data.get("weekly_to_date_total_progress_percent", 0.0),
+            "remaining_hours": self.coordinator.data.get("weekly_total_remaining_hours", 0.0),
+            "remaining_seconds": self.coordinator.data.get("weekly_total_remaining_seconds", 0),
+            "remaining_formatted": self.coordinator.data.get("weekly_total_remaining_formatted", "00:00"),
+            "remaining_hours_to_date": self.coordinator.data.get("weekly_to_date_total_remaining_hours", 0.0),
+            "remaining_seconds_to_date": self.coordinator.data.get("weekly_to_date_total_remaining_seconds", 0),
+            "remaining_formatted_to_date": self.coordinator.data.get("weekly_to_date_total_remaining_formatted", "00:00"),
+            "working_days": self.coordinator.data.get("working_days", []),
         }
         
         # Add daily breakdown attributes
@@ -394,6 +458,12 @@ class ClockifyDailyTotalSensor(CoordinatorEntity, SensorEntity):
                 "duration_formatted": "00:00",
                 "date": None,
                 "includes_current_timer": False,
+                "expected_hours": 0.0,
+                "expected_seconds": 0,
+                "progress_percent": 0.0,
+                "remaining_hours": 0.0,
+                "remaining_seconds": 0,
+                "remaining_formatted": "00:00",
             }
             
         daily_total = self.coordinator.data.get("daily_total", 0)
@@ -407,6 +477,12 @@ class ClockifyDailyTotalSensor(CoordinatorEntity, SensorEntity):
             "date": self.coordinator.data.get("current_date"),
             "includes_current_timer": daily_total > daily_duration,
             "completed_time_seconds": daily_duration,
+            "expected_hours": self.coordinator.data.get("daily_expected_hours", 0.0),
+            "expected_seconds": self.coordinator.data.get("daily_expected_seconds", 0),
+            "progress_percent": self.coordinator.data.get("daily_total_progress_percent", 0.0),
+            "remaining_hours": self.coordinator.data.get("daily_total_remaining_hours", 0.0),
+            "remaining_seconds": self.coordinator.data.get("daily_total_remaining_seconds", 0),
+            "remaining_formatted": self.coordinator.data.get("daily_total_remaining_formatted", "00:00"),
         }
 
     @property

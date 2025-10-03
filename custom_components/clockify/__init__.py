@@ -121,6 +121,9 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 user_data = await self._async_get_user()
                 user_id = user_data["id"]
                 
+                # Get workspace settings for capacity calculations
+                workspace_settings = await self._async_get_workspace_settings()
+                
                 # Get current timer
                 current_timer = await self._async_get_current_timer(user_id)
                 
@@ -178,6 +181,45 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     daily_breakdown_formatted = {}
                     daily_breakdown_total_formatted = {}
                 
+                # Calculate expected hours and progress metrics
+                expected_hours = self._calculate_expected_hours(workspace_settings, now)
+                
+                # Daily progress metrics (for completed time)
+                daily_progress = self._calculate_progress_metrics(
+                    daily_duration,
+                    expected_hours["daily_expected_seconds"]
+                )
+                
+                # Daily total progress metrics (including current timer)
+                daily_total_progress = self._calculate_progress_metrics(
+                    daily_total,
+                    expected_hours["daily_expected_seconds"]
+                )
+                
+                # Weekly progress metrics (for completed time) - full week
+                weekly_progress = self._calculate_progress_metrics(
+                    weekly_duration,
+                    expected_hours["weekly_expected_seconds"]
+                )
+                
+                # Weekly total progress metrics (including current timer) - full week
+                weekly_total_progress = self._calculate_progress_metrics(
+                    weekly_total,
+                    expected_hours["weekly_expected_seconds"]
+                )
+                
+                # Weekly to-date progress metrics (for completed time)
+                weekly_to_date_progress = self._calculate_progress_metrics(
+                    weekly_duration,
+                    expected_hours["weekly_to_date_expected_seconds"]
+                )
+                
+                # Weekly to-date total progress metrics (including current timer)
+                weekly_to_date_total_progress = self._calculate_progress_metrics(
+                    weekly_total,
+                    expected_hours["weekly_to_date_expected_seconds"]
+                )
+                
                 return {
                     "current_timer": current_timer,
                     "project": project_data,
@@ -194,6 +236,44 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     "daily_breakdown_total": daily_breakdown_total,
                     "daily_breakdown_formatted": daily_breakdown_formatted,
                     "daily_breakdown_total_formatted": daily_breakdown_total_formatted,
+                    # Expected hours
+                    "daily_expected_seconds": expected_hours["daily_expected_seconds"],
+                    "daily_expected_hours": expected_hours["daily_expected_hours"],
+                    "weekly_expected_seconds": expected_hours["weekly_expected_seconds"],
+                    "weekly_expected_hours": expected_hours["weekly_expected_hours"],
+                    "weekly_to_date_expected_seconds": expected_hours["weekly_to_date_expected_seconds"],
+                    "weekly_to_date_expected_hours": expected_hours["weekly_to_date_expected_hours"],
+                    "working_days": expected_hours["working_days"],
+                    # Daily progress (completed only)
+                    "daily_progress_percent": daily_progress["progress_percent"],
+                    "daily_remaining_seconds": daily_progress["remaining_seconds"],
+                    "daily_remaining_hours": daily_progress["remaining_hours"],
+                    "daily_remaining_formatted": daily_progress["remaining_formatted"],
+                    # Daily total progress (including current timer)
+                    "daily_total_progress_percent": daily_total_progress["progress_percent"],
+                    "daily_total_remaining_seconds": daily_total_progress["remaining_seconds"],
+                    "daily_total_remaining_hours": daily_total_progress["remaining_hours"],
+                    "daily_total_remaining_formatted": daily_total_progress["remaining_formatted"],
+                    # Weekly progress (completed only) - full week
+                    "weekly_progress_percent": weekly_progress["progress_percent"],
+                    "weekly_remaining_seconds": weekly_progress["remaining_seconds"],
+                    "weekly_remaining_hours": weekly_progress["remaining_hours"],
+                    "weekly_remaining_formatted": weekly_progress["remaining_formatted"],
+                    # Weekly total progress (including current timer) - full week
+                    "weekly_total_progress_percent": weekly_total_progress["progress_percent"],
+                    "weekly_total_remaining_seconds": weekly_total_progress["remaining_seconds"],
+                    "weekly_total_remaining_hours": weekly_total_progress["remaining_hours"],
+                    "weekly_total_remaining_formatted": weekly_total_progress["remaining_formatted"],
+                    # Weekly to-date progress (completed only)
+                    "weekly_to_date_progress_percent": weekly_to_date_progress["progress_percent"],
+                    "weekly_to_date_remaining_seconds": weekly_to_date_progress["remaining_seconds"],
+                    "weekly_to_date_remaining_hours": weekly_to_date_progress["remaining_hours"],
+                    "weekly_to_date_remaining_formatted": weekly_to_date_progress["remaining_formatted"],
+                    # Weekly to-date total progress (including current timer)
+                    "weekly_to_date_total_progress_percent": weekly_to_date_total_progress["progress_percent"],
+                    "weekly_to_date_total_remaining_seconds": weekly_to_date_total_progress["remaining_seconds"],
+                    "weekly_to_date_total_remaining_hours": weekly_to_date_total_progress["remaining_hours"],
+                    "weekly_to_date_total_remaining_formatted": weekly_to_date_total_progress["remaining_formatted"],
                 }
                 
         except Exception as err:
@@ -243,6 +323,122 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning(f"Error getting task {task_id}: {response.status}")
                 return None
             return await response.json()
+
+    async def _async_get_workspace_settings(self):
+        """Get workspace settings including work hours configuration."""
+        url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/workweek"
+        headers = {"X-Api-Key": self.api_key}
+        
+        try:
+            async with self.session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    _LOGGER.warning(f"Error getting workspace settings: {response.status}")
+                    return None
+                return await response.json()
+        except Exception as err:
+            _LOGGER.warning(f"Error fetching workspace settings: {err}")
+            return None
+
+    def _calculate_expected_hours(self, workspace_settings: dict, current_date: datetime) -> dict:
+        """Calculate expected hours based on workspace settings."""
+        result = {
+            "daily_expected_seconds": 0,
+            "daily_expected_hours": 0.0,
+            "weekly_expected_seconds": 0,
+            "weekly_expected_hours": 0.0,
+            "weekly_to_date_expected_seconds": 0,
+            "weekly_to_date_expected_hours": 0.0,
+            "working_days": [],
+        }
+        
+        if not workspace_settings:
+            # Default to 8 hours/day, Mon-Fri if no settings available
+            _LOGGER.info("No workspace settings available, using defaults")
+            day_name = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][current_date.weekday()]
+            if day_name in ["Mon", "Tue", "Wed", "Thu", "Fri"]:
+                result["daily_expected_seconds"] = 8 * 3600
+                result["daily_expected_hours"] = 8.0
+                result["working_days"] = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+            result["weekly_expected_seconds"] = 5 * 8 * 3600
+            result["weekly_expected_hours"] = 40.0
+            
+            # Calculate to-date (only count working days up to today)
+            days_since_monday = current_date.weekday()
+            working_days_to_date = min(days_since_monday + 1, 5)  # Max 5 working days
+            result["weekly_to_date_expected_seconds"] = working_days_to_date * 8 * 3600
+            result["weekly_to_date_expected_hours"] = working_days_to_date * 8.0
+            
+            return result
+        
+        # Parse workspace settings
+        # Clockify workweek API returns structure like:
+        # {
+        #   "daysOfWeek": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"],
+        #   "hoursPerDay": 8
+        # }
+        days_of_week = workspace_settings.get("daysOfWeek", [])
+        hours_per_day = workspace_settings.get("hoursPerDay", 8)
+        
+        # Map Clockify day names to our short names
+        day_mapping = {
+            "MONDAY": "Mon",
+            "TUESDAY": "Tue",
+            "WEDNESDAY": "Wed",
+            "THURSDAY": "Thu",
+            "FRIDAY": "Fri",
+            "SATURDAY": "Sat",
+            "SUNDAY": "Sun"
+        }
+        
+        working_days = [day_mapping.get(day, day[:3]) for day in days_of_week]
+        result["working_days"] = working_days
+        
+        # Get current day name
+        current_day_name = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][current_date.weekday()]
+        
+        # Calculate daily expected hours
+        if current_day_name in working_days:
+            result["daily_expected_seconds"] = int(hours_per_day * 3600)
+            result["daily_expected_hours"] = float(hours_per_day)
+        
+        # Calculate weekly expected hours
+        result["weekly_expected_seconds"] = len(working_days) * int(hours_per_day * 3600)
+        result["weekly_expected_hours"] = len(working_days) * float(hours_per_day)
+        
+        # Calculate expected hours for week to date (only count working days up to today in the current week)
+        days_since_monday = current_date.weekday()
+        week_day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        working_days_to_date = 0
+        
+        for i in range(days_since_monday + 1):  # Include today
+            if week_day_names[i] in working_days:
+                working_days_to_date += 1
+        
+        result["weekly_to_date_expected_seconds"] = working_days_to_date * int(hours_per_day * 3600)
+        result["weekly_to_date_expected_hours"] = working_days_to_date * float(hours_per_day)
+        
+        return result
+
+    def _calculate_progress_metrics(self, logged_seconds: int, expected_seconds: int) -> dict:
+        """Calculate progress percentage and remaining time."""
+        result = {
+            "progress_percent": 0.0,
+            "remaining_seconds": 0,
+            "remaining_hours": 0.0,
+            "remaining_formatted": "00:00",
+        }
+        
+        if expected_seconds > 0:
+            result["progress_percent"] = round((logged_seconds / expected_seconds) * 100, 1)
+            result["remaining_seconds"] = max(0, expected_seconds - logged_seconds)
+            result["remaining_hours"] = round(result["remaining_seconds"] / 3600, 2)
+            
+            # Format remaining time as HH:MM
+            hours = result["remaining_seconds"] // 3600
+            minutes = (result["remaining_seconds"] % 3600) // 60
+            result["remaining_formatted"] = f"{hours:02d}:{minutes:02d}"
+        
+        return result
 
     async def _should_exclude_time_entry(self, entry: dict, project_cache: dict = None) -> bool:
         """Check if a time entry should be excluded from totals."""
