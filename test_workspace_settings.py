@@ -1,4 +1,4 @@
-"""Test script to fetch and display Clockify user schedule settings."""
+"""Test script to fetch and display Clockify member profile settings."""
 import asyncio
 import aiohttp
 import json
@@ -7,8 +7,8 @@ import json
 API_KEY = "your_api_key_here"
 WORKSPACE_ID = "your_workspace_id_here"
 
-async def test_user_schedule():
-    """Fetch and display user schedule settings."""
+async def test_member_profile():
+    """Fetch and display member profile settings."""
     # First get user ID
     user_url = "https://api.clockify.me/api/v1/user"
     headers = {"X-Api-Key": API_KEY}
@@ -28,62 +28,62 @@ async def test_user_schedule():
             print(f"✅ User ID: {user_id}")
             print(f"User Name: {user_data.get('name')}")
             print(f"Email: {user_data.get('email')}")
+            
+            # Check user settings
+            if "settings" in user_data:
+                print(f"\nUser Settings:")
+                print(f"  Week Start: {user_data['settings'].get('weekStart', 'Not set')}")
         
-        # Now get user schedule
-        schedule_url = f"https://api.clockify.me/api/v1/workspaces/{WORKSPACE_ID}/scheduling/users/{user_id}"
+        # Now get member profile
+        profile_url = f"https://api.clockify.me/api/v1/workspaces/{WORKSPACE_ID}/member-profile/{user_id}"
         
         print("\n" + "=" * 60)
-        print("FETCHING USER SCHEDULE SETTINGS")
+        print("FETCHING MEMBER PROFILE")
         print("=" * 60)
-        print(f"URL: {schedule_url}")
+        print(f"URL: {profile_url}")
         print(f"Workspace ID: {WORKSPACE_ID}")
+        print(f"User ID: {user_id}")
         print("-" * 60)
         
-        async with session.get(schedule_url, headers=headers) as response:
+        async with session.get(profile_url, headers=headers) as response:
             print(f"Response Status: {response.status}")
             
             if response.status == 200:
                 data = await response.json()
-                print("\n✅ User Schedule Retrieved Successfully!\n")
+                print("\n✅ Member Profile Retrieved Successfully!\n")
                 print(json.dumps(data, indent=2))
                 
-                # Parse the workWeek like the integration does
-                work_week = data.get("workWeek", {})
+                # Parse key settings
+                print("\n" + "=" * 60)
+                print("KEY SETTINGS:")
+                print("=" * 60)
                 
-                if work_week:
-                    print("\n" + "=" * 60)
-                    print("PARSED WORK WEEK:")
-                    print("=" * 60)
+                week_start = data.get("weekStart", "Not set")
+                work_capacity = data.get("workCapacity", "Not set")
+                working_days_str = data.get("workingDays", "[]")
+                
+                print(f"Week Start: {week_start}")
+                print(f"Work Capacity: {work_capacity}")
+                print(f"Working Days (raw): {working_days_str}")
+                
+                # Parse work capacity
+                if work_capacity and work_capacity != "Not set":
+                    hours = parse_iso_duration(work_capacity)
+                    print(f"Work Capacity (parsed): {hours} hours/day")
+                
+                # Parse working days
+                try:
+                    working_days = json.loads(working_days_str)
+                    print(f"Working Days (parsed): {working_days}")
                     
-                    day_mapping = {
-                        "monday": "Mon",
-                        "tuesday": "Tue",
-                        "wednesday": "Wed",
-                        "thursday": "Thu",
-                        "friday": "Fri",
-                        "saturday": "Sat",
-                        "sunday": "Sun"
-                    }
-                    
-                    working_days = []
-                    daily_hours = {}
-                    
-                    for api_day, short_day in day_mapping.items():
-                        day_data = work_week.get(api_day, {})
-                        is_work_day = day_data.get("isWorkDay", False)
-                        duration = day_data.get("duration", "PT0H")
-                        
-                        if is_work_day:
-                            working_days.append(short_day)
-                            hours = parse_iso_duration(duration)
-                            daily_hours[short_day] = hours
-                            print(f"{short_day}: {hours} hours ({duration})")
-                    
-                    print("\n" + "-" * 60)
-                    print(f"Working Days: {working_days}")
-                    print(f"Total Weekly Hours: {sum(daily_hours.values())}")
-                else:
-                    print("\n⚠️  No workWeek data found in response")
+                    # Calculate weekly hours
+                    if work_capacity and work_capacity != "Not set":
+                        hours_per_day = parse_iso_duration(work_capacity)
+                        total_weekly = len(working_days) * hours_per_day
+                        print(f"\nCalculated Weekly Hours: {total_weekly} hours")
+                        print(f"  {len(working_days)} working days × {hours_per_day} hours/day")
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"Failed to parse working days: {e}")
                 
             elif response.status == 401:
                 print("\n❌ Authentication Failed!")
@@ -93,8 +93,7 @@ async def test_user_schedule():
                 print("You don't have permission to access this resource.")
             elif response.status == 404:
                 print("\n❌ Not Found!")
-                print("The scheduling endpoint might not be available.")
-                print("This might require a specific Clockify plan or feature.")
+                print("The member profile endpoint might not be available.")
             else:
                 error_text = await response.text()
                 print(f"\n❌ Error: {response.status}")
@@ -129,14 +128,14 @@ def parse_iso_duration(duration: str) -> float:
 async def main():
     """Run the test."""
     print("=" * 60)
-    print("CLOCKIFY USER SCHEDULE TEST")
+    print("CLOCKIFY MEMBER PROFILE TEST")
     print("=" * 60)
     
     if API_KEY == "your_api_key_here" or WORKSPACE_ID == "your_workspace_id_here":
         print("\n⚠️  Please update API_KEY and WORKSPACE_ID in the script first!")
         return
     
-    await test_user_schedule()
+    await test_member_profile()
     
     print("\n" + "=" * 60)
     print("TEST COMPLETE")

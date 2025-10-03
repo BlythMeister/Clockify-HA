@@ -121,11 +121,16 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 user_data = await self._async_get_user()
                 user_id = user_data["id"]
                 
-                # Get user's week start day setting (MONDAY, SUNDAY, SATURDAY)
-                week_start_day = user_data.get("settings", {}).get("weekStart", "MONDAY")
+                # Get user's member profile for workspace-specific settings
+                member_profile = await self._async_get_member_profile(user_id)
                 
-                # Get user schedule settings for capacity calculations
-                user_schedule = await self._async_get_user_schedule_settings(user_id)
+                # Get week start day from member profile
+                week_start_day = "MONDAY"
+                if member_profile:
+                    week_start_day = member_profile.get("weekStart", "MONDAY")
+                
+                # Use member profile for capacity calculations
+                user_schedule = member_profile if member_profile else None
                 
                 # Get current timer
                 current_timer = await self._async_get_current_timer(user_id)
@@ -385,20 +390,20 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 return None
             return await response.json()
 
-    async def _async_get_user_schedule_settings(self, user_id: str):
-        """Get user-specific schedule settings including work hours configuration."""
-        # Use the scheduling API to get user-specific time off and work week settings
-        url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/scheduling/users/{user_id}"
+    async def _async_get_member_profile(self, user_id: str):
+        """Get workspace member profile including work week configuration and settings."""
+        # Use the member profile API to get workspace-specific user settings
+        url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/member-profile/{user_id}"
         headers = {"X-Api-Key": self.api_key}
         
         try:
             async with self.session.get(url, headers=headers) as response:
                 if response.status != 200:
-                    _LOGGER.warning(f"Error getting user schedule settings: {response.status}")
+                    _LOGGER.warning(f"Error getting member profile: {response.status}")
                     return None
                 return await response.json()
         except Exception as err:
-            _LOGGER.warning(f"Error fetching user schedule settings: {err}")
+            _LOGGER.warning(f"Error fetching member profile: {err}")
             return None
 
     def _calculate_expected_hours(self, user_schedule: dict, current_date: datetime, week_start_day: str = "MONDAY") -> dict:
@@ -446,6 +451,70 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     working_days_remaining += 1
             result["weekly_remaining_expected_seconds"] = working_days_remaining * 8 * 3600
             result["weekly_remaining_expected_hours"] = working_days_remaining * 8.0
+            
+            return result
+        
+        # First, try to parse member profile format (workCapacity + workingDays)
+        if "workCapacity" in user_schedule and "workingDays" in user_schedule:
+            import json as json_lib
+            
+            # Parse work capacity (e.g., "PT7H")
+            work_capacity_str = user_schedule.get("workCapacity", "PT8H")
+            hours_per_day = self._parse_iso_duration(work_capacity_str)
+            
+            # Parse working days (e.g., "[\"MONDAY\",\"TUESDAY\",...]")
+            working_days_str = user_schedule.get("workingDays", "[]")
+            try:
+                working_days_api = json_lib.loads(working_days_str)
+            except (json_lib.JSONDecodeError, TypeError):
+                working_days_api = []
+            
+            # Map Clockify day names to our short names
+            day_mapping = {
+                "MONDAY": "Mon",
+                "TUESDAY": "Tue",
+                "WEDNESDAY": "Wed",
+                "THURSDAY": "Thu",
+                "FRIDAY": "Fri",
+                "SATURDAY": "Sat",
+                "SUNDAY": "Sun"
+            }
+            
+            working_days = [day_mapping.get(day, day[:3]) for day in working_days_api]
+            result["working_days"] = working_days
+            
+            # Get current day name
+            current_day_name = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][current_date.weekday()]
+            
+            # Calculate daily expected hours
+            if current_day_name in working_days:
+                result["daily_expected_seconds"] = int(hours_per_day * 3600)
+                result["daily_expected_hours"] = float(hours_per_day)
+            
+            # Calculate weekly expected hours
+            result["weekly_expected_seconds"] = len(working_days) * int(hours_per_day * 3600)
+            result["weekly_expected_hours"] = len(working_days) * float(hours_per_day)
+            
+            # Calculate expected hours for week to date
+            days_since_week_start = self._calculate_days_since_week_start(current_date, week_start_day)
+            week_day_order = self._get_week_day_order(week_start_day)
+            working_days_to_date = 0
+            
+            for i in range(days_since_week_start + 1):
+                if week_day_order[i] in working_days:
+                    working_days_to_date += 1
+            
+            result["weekly_to_date_expected_seconds"] = working_days_to_date * int(hours_per_day * 3600)
+            result["weekly_to_date_expected_hours"] = working_days_to_date * float(hours_per_day)
+            
+            # Calculate expected hours for remaining days of the week (after today)
+            working_days_remaining = 0
+            for i in range(days_since_week_start + 1, 7):  # Days after today until end of week
+                if week_day_order[i] in working_days:
+                    working_days_remaining += 1
+            
+            result["weekly_remaining_expected_seconds"] = working_days_remaining * int(hours_per_day * 3600)
+            result["weekly_remaining_expected_hours"] = working_days_remaining * float(hours_per_day)
             
             return result
         
