@@ -456,18 +456,22 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         
         # First, try to parse member profile format (workCapacity + workingDays)
         if "workCapacity" in user_schedule and "workingDays" in user_schedule:
-            import json as json_lib
-            
             # Parse work capacity (e.g., "PT7H")
             work_capacity_str = user_schedule.get("workCapacity", "PT8H")
             hours_per_day = self._parse_iso_duration(work_capacity_str)
             
-            # Parse working days (e.g., "[\"MONDAY\",\"TUESDAY\",...]")
-            working_days_str = user_schedule.get("workingDays", "[]")
-            try:
-                working_days_api = json_lib.loads(working_days_str)
-            except (json_lib.JSONDecodeError, TypeError):
-                working_days_api = []
+            # Parse working days - can be either a list or a JSON string
+            working_days_raw = user_schedule.get("workingDays", [])
+            if isinstance(working_days_raw, str):
+                # If it's a JSON string, parse it
+                import json as json_lib
+                try:
+                    working_days_api = json_lib.loads(working_days_raw)
+                except (json_lib.JSONDecodeError, TypeError):
+                    working_days_api = []
+            else:
+                # If it's already a list, use it directly
+                working_days_api = working_days_raw
             
             # Map Clockify day names to our short names
             day_mapping = {

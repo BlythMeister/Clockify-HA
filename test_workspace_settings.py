@@ -60,11 +60,11 @@ async def test_member_profile():
                 
                 week_start = data.get("weekStart", "Not set")
                 work_capacity = data.get("workCapacity", "Not set")
-                working_days_str = data.get("workingDays", "[]")
+                working_days_raw = data.get("workingDays", [])
                 
                 print(f"Week Start: {week_start}")
                 print(f"Work Capacity: {work_capacity}")
-                print(f"Working Days (raw): {working_days_str}")
+                print(f"Working Days (raw): {working_days_raw}")
                 
                 # Parse work capacity
                 if work_capacity and work_capacity != "Not set":
@@ -73,7 +73,12 @@ async def test_member_profile():
                 
                 # Parse working days
                 try:
-                    working_days = json.loads(working_days_str)
+                    # Handle both list and JSON string formats
+                    if isinstance(working_days_raw, str):
+                        working_days = json.loads(working_days_raw)
+                    else:
+                        working_days = working_days_raw
+                    
                     print(f"Working Days (parsed): {working_days}")
                     
                     # Calculate weekly hours
