@@ -301,6 +301,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     return response.status, data
 
                 if attempt == max_retries:
+                    response_body = await response.text()
                     rate_limit_headers = {
                         name: response.headers.get(name)
                         for name in (
@@ -313,9 +314,10 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     }
                     _LOGGER.error(
                         "Clockify API rate limit retry limit reached for workspace %s; "
-                        "rate limit headers: %s",
+                        "rate limit headers: %s; response body: %s",
                         self.workspace_id,
                         rate_limit_headers or "unavailable",
+                        response_body or "empty",
                     )
                     return response.status, None
 
