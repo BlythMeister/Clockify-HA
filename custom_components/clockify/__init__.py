@@ -1,9 +1,9 @@
 """The Clockify integration."""
 from __future__ import annotations
 
-import logging
 import asyncio
-from datetime import timedelta, datetime, timezone
+import logging
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 import aiohttp
@@ -307,7 +307,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 retry_after = response.headers.get("Retry-After")
 
             try:
-                delay = float(retry_after)
+                delay = max(0, float(retry_after))
             except (TypeError, ValueError):
                 try:
                     retry_at = parsedate_to_datetime(retry_after)
