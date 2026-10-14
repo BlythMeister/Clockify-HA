@@ -315,7 +315,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                         retry_at = retry_at.replace(tzinfo=timezone.utc)
                     delay = max(0, (retry_at - datetime.now(timezone.utc)).total_seconds())
                 except (TypeError, ValueError, OverflowError):
-                    delay = 2 ** attempt
+                    delay = 5
 
             _LOGGER.warning("Clockify API rate limited; retrying in %.1f seconds", delay)
             await asyncio.sleep(delay)
