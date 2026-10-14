@@ -1,8 +1,10 @@
 """The Clockify integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import timedelta, datetime, timezone
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 
 import aiohttp
 import async_timeout
@@ -116,7 +118,7 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Update data via library."""
         try:
-            async with async_timeout.timeout(10):
+            async with async_timeout.timeout(120):
                 # Get current user
                 user_data = await self._async_get_user()
                 user_id = user_data["id"]
@@ -289,15 +291,44 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             raise UpdateFailed(f"Error communicating with API: {err}")
     
+    async def _async_get_json(self, url: str, **kwargs):
+        """Get JSON from the API, retrying rate-limited requests."""
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            async with self.session.get(url, **kwargs) as response:
+                if response.status != 429:
+                    data = await response.json() if response.status == 200 else None
+                    return response.status, data
+
+                if attempt == max_retries:
+                    _LOGGER.warning("Clockify API rate limit retry limit reached")
+                    return response.status, None
+
+                retry_after = response.headers.get("Retry-After")
+
+            try:
+                delay = max(0, float(retry_after))
+            except (TypeError, ValueError):
+                try:
+                    retry_at = parsedate_to_datetime(retry_after)
+                    if retry_at.tzinfo is None:
+                        retry_at = retry_at.replace(tzinfo=timezone.utc)
+                    delay = max(0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+                except (TypeError, ValueError, OverflowError):
+                    delay = 5
+
+            _LOGGER.warning("Clockify API rate limited; retrying in %.1f seconds", delay)
+            await asyncio.sleep(delay)
+
     async def _async_get_user(self):
         """Get current user information."""
         url = "https://api.clockify.me/api/v1/user"
         headers = {"X-Api-Key": self.api_key}
         
-        async with self.session.get(url, headers=headers) as response:
-            if response.status != 200:
-                raise UpdateFailed(f"Error getting user: {response.status}")
-            return await response.json()
+        status, data = await self._async_get_json(url, headers=headers)
+        if status != 200:
+            raise UpdateFailed(f"Error getting user: {status}")
+        return data
     
     def _get_week_start_offset(self, week_start_day: str) -> int:
         """
@@ -361,34 +392,32 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         headers = {"X-Api-Key": self.api_key}
         params = {"in-progress": "true"}
         
-        async with self.session.get(url, headers=headers, params=params) as response:
-            if response.status != 200:
-                raise UpdateFailed(f"Error getting timer: {response.status}")
-            
-            data = await response.json()
-            return data[0] if data else None
+        status, data = await self._async_get_json(url, headers=headers, params=params)
+        if status != 200:
+            raise UpdateFailed(f"Error getting timer: {status}")
+        return data[0] if data else None
     
     async def _async_get_project(self, project_id: str):
         """Get project details."""
         url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/projects/{project_id}"
         headers = {"X-Api-Key": self.api_key}
         
-        async with self.session.get(url, headers=headers) as response:
-            if response.status != 200:
-                _LOGGER.warning(f"Error getting project {project_id}: {response.status}")
-                return None
-            return await response.json()
+        status, data = await self._async_get_json(url, headers=headers)
+        if status != 200:
+            _LOGGER.warning(f"Error getting project {project_id}: {status}")
+            return None
+        return data
     
     async def _async_get_task(self, project_id: str, task_id: str):
         """Get task details."""
         url = f"https://api.clockify.me/api/v1/workspaces/{self.workspace_id}/projects/{project_id}/tasks/{task_id}"
         headers = {"X-Api-Key": self.api_key}
         
-        async with self.session.get(url, headers=headers) as response:
-            if response.status != 200:
-                _LOGGER.warning(f"Error getting task {task_id}: {response.status}")
-                return None
-            return await response.json()
+        status, data = await self._async_get_json(url, headers=headers)
+        if status != 200:
+            _LOGGER.warning(f"Error getting task {task_id}: {status}")
+            return None
+        return data
 
     async def _async_get_member_profile(self, user_id: str):
         """Get workspace member profile including work week configuration and settings."""
@@ -397,11 +426,11 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         headers = {"X-Api-Key": self.api_key}
         
         try:
-            async with self.session.get(url, headers=headers) as response:
-                if response.status != 200:
-                    _LOGGER.warning(f"Error getting member profile: {response.status}")
-                    return None
-                return await response.json()
+            status, data = await self._async_get_json(url, headers=headers)
+            if status != 200:
+                _LOGGER.warning(f"Error getting member profile: {status}")
+                return None
+            return data
         except Exception as err:
             _LOGGER.warning(f"Error fetching member profile: {err}")
             return None
@@ -743,27 +772,26 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         }
         
         try:
-            async with self.session.get(url, headers=headers, params=params) as response:
-                if response.status != 200:
-                    _LOGGER.warning(f"Error getting daily time: {response.status}")
-                    return 0
-                
-                entries = await response.json()
-                total_seconds = 0
-                project_cache = {}  # Cache projects for this calculation
-                
-                for entry in entries:
-                    # Skip excluded entries (breaks)
-                    if await self._should_exclude_time_entry(entry, project_cache):
-                        continue
-                        
-                    time_interval = entry.get("timeInterval", {})
-                    if time_interval.get("start") and time_interval.get("end"):
-                        start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
-                        end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
-                        total_seconds += int((end - start).total_seconds())
-                
-                return total_seconds
+            status, entries = await self._async_get_json(url, headers=headers, params=params)
+            if status != 200:
+                _LOGGER.warning(f"Error getting daily time: {status}")
+                return 0
+
+            total_seconds = 0
+            project_cache = {}  # Cache projects for this calculation
+
+            for entry in entries:
+                # Skip excluded entries (breaks)
+                if await self._should_exclude_time_entry(entry, project_cache):
+                    continue
+
+                time_interval = entry.get("timeInterval", {})
+                if time_interval.get("start") and time_interval.get("end"):
+                    start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
+                    end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
+                    total_seconds += int((end - start).total_seconds())
+
+            return total_seconds
                 
         except Exception as err:
             _LOGGER.warning(f"Error calculating daily time: {err}")
@@ -790,27 +818,26 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
         }
         
         try:
-            async with self.session.get(url, headers=headers, params=params) as response:
-                if response.status != 200:
-                    _LOGGER.warning(f"Error getting weekly time: {response.status}")
-                    return 0, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
-                
-                entries = await response.json()
-                total_seconds = 0
-                project_cache = {}  # Cache projects for this calculation
-                
-                for entry in entries:
-                    # Skip excluded entries (breaks)
-                    if await self._should_exclude_time_entry(entry, project_cache):
-                        continue
-                        
-                    time_interval = entry.get("timeInterval", {})
-                    if time_interval.get("start") and time_interval.get("end"):
-                        start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
-                        end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
-                        total_seconds += int((end - start).total_seconds())
-                
-                return total_seconds, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
+            status, entries = await self._async_get_json(url, headers=headers, params=params)
+            if status != 200:
+                _LOGGER.warning(f"Error getting weekly time: {status}")
+                return 0, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
+
+            total_seconds = 0
+            project_cache = {}  # Cache projects for this calculation
+
+            for entry in entries:
+                # Skip excluded entries (breaks)
+                if await self._should_exclude_time_entry(entry, project_cache):
+                    continue
+
+                time_interval = entry.get("timeInterval", {})
+                if time_interval.get("start") and time_interval.get("end"):
+                    start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
+                    end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
+                    total_seconds += int((end - start).total_seconds())
+
+            return total_seconds, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d")
                 
         except Exception as err:
             _LOGGER.warning(f"Error calculating weekly time: {err}")
@@ -853,20 +880,18 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                 }
                 
                 day_seconds = 0
-                async with self.session.get(url, headers=headers, params=params) as response:
-                    if response.status == 200:
-                        entries = await response.json()
-                        
-                        for entry in entries:
-                            # Skip excluded entries (breaks) - using shared cache
-                            if await self._should_exclude_time_entry(entry, project_cache):
-                                continue
-                                
-                            time_interval = entry.get("timeInterval", {})
-                            if time_interval.get("start") and time_interval.get("end"):
-                                start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
-                                end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
-                                day_seconds += int((end - start).total_seconds())
+                status, entries = await self._async_get_json(url, headers=headers, params=params)
+                if status == 200:
+                    for entry in entries:
+                        # Skip excluded entries (breaks) - using shared cache
+                        if await self._should_exclude_time_entry(entry, project_cache):
+                            continue
+
+                        time_interval = entry.get("timeInterval", {})
+                        if time_interval.get("start") and time_interval.get("end"):
+                            start = datetime.fromisoformat(time_interval["start"].replace("Z", "+00:00"))
+                            end = datetime.fromisoformat(time_interval["end"].replace("Z", "+00:00"))
+                            day_seconds += int((end - start).total_seconds())
                 
                 # Convert to hours for display
                 daily_breakdown[day_name] = round(day_seconds / 3600, 2)

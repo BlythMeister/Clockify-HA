@@ -66,6 +66,7 @@ A custom Home Assistant integration to monitor and control your Clockify time tr
 
 ### What's New
 
+- **⏳ Rate Limit Handling**: Automatically retries Clockify API requests after HTTP 429 responses, honoring the server's `Retry-After` guidance
 - **📊 Progress Tracking**: All sensors now include automatic progress tracking based on your Clockify workspace settings - see how you're tracking against your daily/weekly goals with percentage complete and remaining time
 - **🎯 Timer Actions**: Start and stop timers directly from Home Assistant using `clockify.start_timer` and `clockify.stop_timer` services
 - **☕ Break Time Exclusion**: All time calculations now automatically exclude break time for more accurate work tracking
