@@ -301,7 +301,22 @@ class ClockifyDataUpdateCoordinator(DataUpdateCoordinator):
                     return response.status, data
 
                 if attempt == max_retries:
-                    _LOGGER.warning("Clockify API rate limit retry limit reached")
+                    rate_limit_headers = {
+                        name: response.headers.get(name)
+                        for name in (
+                            "X-RateLimit-Limit",
+                            "X-RateLimit-Remaining",
+                            "X-RateLimit-Reset",
+                            "Retry-After",
+                        )
+                        if response.headers.get(name) is not None
+                    }
+                    _LOGGER.error(
+                        "Clockify API rate limit retry limit reached for workspace %s; "
+                        "rate limit headers: %s",
+                        self.workspace_id,
+                        rate_limit_headers or "unavailable",
+                    )
                     return response.status, None
 
                 retry_after = response.headers.get("Retry-After")
